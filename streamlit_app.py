@@ -341,14 +341,14 @@ lang_dict = load_localization(language)
 #######################
 
 # Cache OpenAI Embedding for future runs
-@st.cache_resource(show_spinner=lang_dict['load_embedding'])
+@st.cache_resource(show_spinner="Loading embeddings...")
 def load_embedding():
     print("load_embedding")
     # Get the OpenAI Embedding
     return OpenAIEmbeddings()
 
 # Cache Vector Store for future runs
-@st.cache_resource(show_spinner=lang_dict['load_vectorstore'])
+@st.cache_resource(show_spinner="Loading vector store...")
 def load_vectorstore(username):
     print(f"load_vectorstore for {username}")
     # Get the load_vectorstore store from Astra DB
@@ -360,7 +360,7 @@ def load_vectorstore(username):
     )
 
 # Cache Chat History for future runs
-@st.cache_resource(show_spinner=lang_dict['load_message_history'])
+@st.cache_resource(show_spinner="Loading chat history...")
 def load_chat_history(username):
     print(f"load_chat_history for {username}_{st.session_state.session_id}")
     return AstraDBChatMessageHistory(
