@@ -1,0 +1,34 @@
+username,key,value
+
+postnl,1,Wat is PostNL?
+postnl,2,Wat nou als ik veel pakketten moet versturen?
+postnl,3,Vertel me meer over de haalservice
+postnl,4,Schrijf een mail voor een prospect over de haalservice
+postnl,5,Wat zijn de duurzaamheidsvoordelen van de haalservice?
+
+datastax,1,What is DataStax?
+datastax,2,What is Vector Search?
+datastax,3,Tell me more about why Astra DB is the best!
+datastax,4,Write an email for a prospect about Astra DB
+datastax,5,What advantages does Astra DB offer for Generative AI?
+datastax,6,What strategies exists for meaningful agent interaction
+datastax,7,How can I use Astra DB in a RAG application?
+
+uniphore,1,What is Uniphore?
+uniphore,2,What is Uniphore Q?
+uniphore,3,Tell me more about why Uniphore Q is the best product!
+uniphore,4,Write an email for a prospect
+uniphore,5,What advantages does Uniphore Q offer?
+uniphore,6,What strategies exists for meaningful seller and buyer interaction
+uniphore,7,How can I integrate Uniphore Q with enterprise applications?
+
+eu,1,What is DG GROW about?
+eu,2,What does single market mean?
+eu,3,What are the aims?
+eu,4,How can I apply for emergency measures?
+
+ing,1,What was the net result in 2023?
+ing,2,Which growth markets is ING after?
+ing,3,How does ING help solve our biggest challenges?
+ing,4,Write an email for a prospect listing the ING promises
+ing,5,How to use ING Open Banking Drivers for PSD2 API's
