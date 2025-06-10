@@ -24,11 +24,8 @@ from langchain.callbacks.base import BaseCallbackHandler
 import openai
 
 # --- CONFIGURACIÓN GLOBAL ---
-# El nombre de la colección en Astra DB que usarán todos los usuarios
 ASTRA_DB_COLLECTION_NAME = "vc_assistant"
-
-# Lista de usernames que tendrán acceso a las herramientas de ingesta de documentos
-ADMIN_USERS = ["openlab_admin"] # Puedes añadir más aquí, ej. ["admin1", "admin2"]
+ADMIN_USERS = ["openlab_admin"] 
 
 
 print("Streamlit App Started")
@@ -68,7 +65,7 @@ def check_password():
     if st.session_state.get('password_correct', False):
         return True
     login_form()
-    if "password_correct" in st.session_state and not st.session_state['password_correct']:
+    if "password_correct" in st.session_state and not st.session_state.password_correct:
         st.error('😕 Usuario desconocido o contraseña incorrecta')
     return False
 
@@ -92,26 +89,25 @@ def vectorize_text(uploaded_files, vectorstore, lang_dict):
                 
                 st.session_state.debug_messages.append(f"Admin: Processing file {uploaded_file.name}")
                 try:
-                    loader = None
+                    docs = []
                     if uploaded_file.name.endswith('.pdf'):
                         loader = PyPDFLoader(tmp_file_path)
+                        docs = loader.load_and_split()
                     elif uploaded_file.name.endswith('.csv'):
                         loader = CSVLoader(tmp_file_path, encoding='utf-8')
+                        docs = loader.load()
                     elif uploaded_file.name.endswith('.txt'):
                         from langchain.schema import Document
                         with open(tmp_file_path, 'r', encoding='utf-8') as f_txt:
-                            docs = [Document(page_content=f_txt.read(), metadata={"source": uploaded_file.name})]
+                            text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
+                            docs = text_splitter.create_documents([f_txt.read()], metadatas=[{"source": uploaded_file.name}])
                     else:
                         st.warning(f"Unsupported file type: {uploaded_file.name}")
                         continue
                     
-                    if loader:
-                        docs = loader.load()
-                    
-                    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
-                    pages = text_splitter.split_documents(docs)
-                    vectorstore.add_documents(pages)
-                    st.info(f"✅ {uploaded_file.name} processed ({len(pages)} segments).")
+                    if docs:
+                        vectorstore.add_documents(docs)
+                        st.info(f"✅ {uploaded_file.name} processed ({len(docs)} segments).")
                 except Exception as e:
                     st.error(f"Error processing file {uploaded_file.name}: {e}")
                 finally:
@@ -153,7 +149,6 @@ Answer in {language}:"""
 You're friendly and you answer extensively with multiple sentences. You prefer to use bulletpoints to summarize.
 If you don't know the answer, just say 'I do not know the answer'.
 {base_template}"""
-
     elif type == 'Short results':
         template = f"""You're a helpful AI assistant tasked to answer the user's questions.
 You answer in an exceptionally brief way.
@@ -163,6 +158,15 @@ If you don't know the answer, just say 'I do not know the answer'.
         template = custom_prompt if custom_prompt else base_template
     
     return ChatPromptTemplate.from_messages([("system", template)])
+
+# ---- FUNCIÓN AÑADIDA ----
+def load_retriever(vectorstore, top_k_vectorstore):
+    print(f"""load_retriever with top_k_vectorstore='{top_k_vectorstore}'""")
+    # Get the Retriever from the Vectorstore
+    return vectorstore.as_retriever(
+        search_kwargs={"k": top_k_vectorstore}
+    )
+# -------------------------
 
 def generate_queries(model, language):
     prompt = f"""You are a helpful assistant that generates multiple search queries based on a single input query in language {language}.
@@ -179,10 +183,11 @@ def reciprocal_rank_fusion(results: list[list], k=60):
                 doc_str = dumps(doc)
                 if doc_str not in fused_scores: fused_scores[doc_str] = 0
                 fused_scores[doc_str] += 1 / (rank + k)
-            except Exception: continue
+            except: continue
     return [(loads(doc), score) for doc, score in sorted(fused_scores.items(), key=lambda x: x[1], reverse=True)]
 
-# --- Funciones de Carga de Recursos Cacheadas (CORREGIDAS) ---
+
+# --- Funciones de Carga de Recursos Cacheadas ---
 @st.cache_data()
 def load_localization(locale):
     try:
@@ -190,7 +195,7 @@ def load_localization(locale):
         df_lang = df.query(f"locale == '{locale}'")
         if df_lang.empty: df_lang = df.query("locale == 'en_US'")
         return pd.Series(df_lang.value.values, index=df_lang.key).to_dict()
-    except Exception: return {}
+    except Exception: return {"assistant_welcome": "Welcome (localization file not found)."}
 
 @st.cache_data()
 def load_rails(username):
@@ -208,7 +213,7 @@ def load_embedding_rc():
 def load_vectorstore_rc(username, _embedding): # Underscore to prevent hashing
     return AstraDB(
         embedding=_embedding,
-        collection_name=ASTRA_DB_COLLECTION_NAME, # <-- USA EL NOMBRE DE COLECCIÓN FIJO
+        collection_name=ASTRA_DB_COLLECTION_NAME,
         token=st.secrets["ASTRA_TOKEN"],
         api_endpoint=st.secrets.get("ASTRA_ENDPOINT", os.environ.get("ASTRA_ENDPOINT")),
         namespace=st.secrets.get("ASTRA_KEYSPACE")
@@ -216,28 +221,12 @@ def load_vectorstore_rc(username, _embedding): # Underscore to prevent hashing
 
 @st.cache_resource(show_spinner="Loading chat history...")
 def load_chat_history_rc(username, session_id):
-    print(f"load_chat_history_rc for {username}_{session_id}")
-    try:
-        astra_token_val = st.secrets.get("ASTRA_TOKEN")
-        astra_endpoint_val = st.secrets.get("ASTRA_ENDPOINT", os.environ.get("ASTRA_ENDPOINT"))
-
-        if not astra_token_val or not astra_endpoint_val:
-            st.error("Astra DB Token or API Endpoint not found for chat history.")
-            return None
-
-        # La clase AstraDBChatMessageHistory no usa 'keyspace_name'.
-        # Usará el keyspace por defecto de tu base de datos.
-        # Sí acepta un 'collection_name' opcional (por defecto es 'message_store').
-        # Es una buena práctica definirlo explícitamente.
-        return AstraDBChatMessageHistory(
-            session_id=f"{username}_{str(session_id)}",
-            api_endpoint=astra_endpoint_val,
-            token=astra_token_val,
-            collection_name="historial_chat_asistente" # Usamos una colección separada para el historial
-        )
-    except Exception as e:
-        st.error(f"Error initializing AstraDB chat history: {e}")
-        return None
+    return AstraDBChatMessageHistory(
+        session_id=f"{username}_{str(session_id)}",
+        api_endpoint=st.secrets.get("ASTRA_ENDPOINT", os.environ.get("ASTRA_ENDPOINT")),
+        token=st.secrets["ASTRA_TOKEN"],
+        collection_name="historial_chat_asistente"
+    )
 
 @st.cache_resource(show_spinner="Loading AI model...")
 def load_model_rc():
@@ -259,7 +248,6 @@ if not check_password():
 username = st.session_state.user
 language = st.secrets.get("languages", {}).get(username, "es_ES")
 lang_dict = load_localization(language)
-rails_dict = load_rails(username)
 
 # Inicializar recursos
 embedding = load_embedding_rc()
@@ -270,28 +258,27 @@ model = load_model_rc()
 # 3. Configuración de Parámetros (Condicional según el usuario)
 if username != "demo":
     with st.sidebar:
-        # Logo y Logout
+        # Logo, Logout, Rails...
         st.image('./customizations/logo/default.svg', use_column_width="always")
         st.markdown(f"""{lang_dict.get('logout_caption','Logged in as')} :orange[{username}]""")
         if st.button(lang_dict.get('logout_button','Logout')): logout()
         st.divider()
 
-        # Sugerencias (Rails)
+        rails_dict = load_rails(username)
         st.subheader(lang_dict.get('rails_1', "Suggestions"))
         st.caption(lang_dict.get('rails_2', "Try asking:"))
         if rails_dict:
             for i in sorted(rails_dict.keys()): st.markdown(f"{i}. {rails_dict[i]}")
-        
         st.divider()
+
         # Opciones de Chat
         st.subheader(lang_dict.get('options_header', "Chat Options"))
         disable_chat_history = st.toggle(lang_dict.get('disable_chat_history', "Disable Chat History"), value=False)
         top_k_history = st.slider(lang_dict.get('k_chat_history', "K for Chat History"), 1, 10, 5, disabled=disable_chat_history)
         disable_vector_store = st.toggle(lang_dict.get('disable_vector_store', "Disable Vector Store?"), value=False)
-        top_k_vectorstore = st.slider(lang_dict.get('top_k_vector_store', "Top-K for Vector Store"), 1, 10, 5, disabled=disable_vector_store)
+        top_k_vectorstore = st.slider(lang_dict.get('top_k_vector_store', "Top-K for Vector Store"), 1, 50, 5, disabled=disable_vector_store)
         strategy = st.selectbox(lang_dict.get('rag_strategy', "RAG Strategy"), ('Basic Retrieval', 'Maximal Marginal Relevance', 'Fusion'), disabled=disable_vector_store)
         
-        # Carga de prompt personalizado
         custom_prompt_text_val = ""
         prompt_options = ('Short results', 'Extended results', 'Custom')
         prompt_idx = 0
@@ -307,38 +294,34 @@ if username != "demo":
         custom_prompt = st.text_area(lang_dict.get('custom_prompt', "Custom Prompt"), value=custom_prompt_text_val, disabled=(prompt_type != 'Custom'))
         
         st.divider()
-        # --- Herramientas de Administración ---
+
+        # Herramientas de Administración
         if username in ADMIN_USERS:
             st.subheader(lang_dict.get('admin_tools_header', "Admin Tools"))
             with st.expander("Upload Files"):
                 uploaded_files = st.file_uploader("Upload TXT, PDF, CSV files", type=['txt', 'pdf', 'csv'], accept_multiple_files=True)
                 if st.button("Process Files"):
-                    vectorize_text(uploaded_files, vectorstore, lang_dict)
+                    if uploaded_files: vectorize_text(uploaded_files, vectorstore, lang_dict)
             with st.expander("Load from URLs"):
                 urls_text = st.text_area("Enter URLs (comma-separated)")
                 if st.button("Process URLs"):
                     urls = [url.strip() for url in urls_text.split(',') if url.strip()]
                     if urls: vectorize_url(urls, vectorstore, lang_dict)
-
 else: # Si el usuario es 'demo'
-    # Inyectar CSS para ocultar la sidebar
     st.markdown("""<style>[data-testid="stSidebar"] {display: none}</style>""", unsafe_allow_html=True)
-    # Definir valores por defecto para que la app no falle
     disable_chat_history = False
     top_k_history = 5
     disable_vector_store = False
     top_k_vectorstore = 3
     strategy = 'Basic Retrieval'
     prompt_type = 'Short results'
-    try: # Cargar prompt por defecto para el usuario demo
-        custom_prompt = Path("./customizations/prompt/default.txt").read_text(encoding='utf-8')
-    except: # Fallback si no existe
-        custom_prompt = ""
+    try: custom_prompt = Path("./customizations/prompt/default.txt").read_text(encoding='utf-8')
+    except: custom_prompt = ""
 
-# Inicializar memoria (fuera del if/else para que ambos tipos de usuario la tengan)
-memory = load_memory_rc(chat_history, top_k_history if not disable_chat_history else 0)
+# Inicializar memoria
+memory = load_memory_rc(chat_history, top_k_history if not disable_chat_history else 0) if chat_history else None
 
-# --- Interfaz Principal del Chat (Visible para TODOS los usuarios) ---
+# --- Interfaz Principal del Chat ---
 if 'messages' not in st.session_state:
     st.session_state.messages = [AIMessage(content=lang_dict.get('assistant_welcome', "Welcome!"))]
 for message in st.session_state.messages:
@@ -357,17 +340,19 @@ if question := st.chat_input(lang_dict.get('assistant_question', "Your question.
         else:
             relevant_documents = []
             if not disable_vector_store:
-                retriever = load_retriever(vectorstore, top_k_vectorstore) # load_retriever es la función original no cacheada
-                if retriever: # Si el retriever se creó correctamente
+                retriever = load_retriever(vectorstore, top_k_vectorstore)
+                if retriever:
                     if strategy == 'Basic Retrieval':
                         relevant_documents = retriever.get_relevant_documents(query=question)
                     elif strategy == 'Maximal Marginal Relevance':
                         relevant_documents = vectorstore.max_marginal_relevance_search(query=question, k=top_k_vectorstore)
                     elif strategy == 'Fusion':
-                        generate_queries_chain_instance = generate_queries(model, language) # Usar función original
+                        generate_queries_chain_instance = generate_queries(model, language)
                         if generate_queries_chain_instance:
                             fusion_queries = generate_queries_chain_instance.invoke({"original_query": question})
-                            # (Aquí iría el resto de la lógica de Fusion RAG)
+                            chain_fusion = generate_queries | retriever.map() | reciprocal_rank_fusion
+                            fused_results = chain_fusion.invoke({"original_query": question})
+                            relevant_documents = [doc_tuple[0] for doc_tuple in fused_results][:top_k_vectorstore]
             
             history = memory.load_memory_variables({}) if memory else {"chat_history": []}
             
@@ -387,9 +372,17 @@ if question := st.chat_input(lang_dict.get('assistant_question', "Your question.
                 final_content = response.content
                 if memory: memory.save_context({'question': question}, {'answer': final_content})
 
-                # (Aquí iría la lógica para añadir las fuentes al final del mensaje)
+                if not disable_vector_store and relevant_documents:
+                    final_content += f"\n\n*{lang_dict.get('sources_used','Fuentes:')}*"
+                    sources_used = []
+                    for doc in relevant_documents:
+                        source_name = doc.metadata.get('source', 'Unknown')
+                        source_basename = os.path.basename(os.path.normpath(source_name))
+                        if source_basename not in sources_used:
+                            final_content += f"\n📙 :orange[{source_basename}]"
+                            sources_used.append(source_basename)
                 
-                response_placeholder.markdown(final_content) # Escribir la respuesta final sin el cursor
+                response_placeholder.markdown(final_content)
                 st.session_state.messages.append(AIMessage(content=final_content))
             except Exception as e:
                 st.error(f"Error during response generation: {e}")
