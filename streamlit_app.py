@@ -205,7 +205,7 @@ def load_embedding_rc():
     return OpenAIEmbeddings(openai_api_key=st.secrets.get("OPENAI_API_KEY"))
 
 @st.cache_resource(show_spinner="Loading vector store...")
-def load_vectorstore_rc(_embedding, username): # Underscore to prevent hashing
+def load_vectorstore_rc(username, _embedding): # Underscore to prevent hashing
     return AstraDB(
         embedding=_embedding,
         collection_name=ASTRA_DB_COLLECTION_NAME, # <-- USA EL NOMBRE DE COLECCIÓN FIJO
