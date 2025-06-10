@@ -257,6 +257,7 @@ model = load_model_rc()
 
 # 3. Configuración de Parámetros (Condicional según el usuario)
 if username != "demo":
+    # --- SIDEBAR PARA USUARIOS NORMALES / ADMINS ---
     with st.sidebar:
         # Logo, Logout, Rails...
         st.image('./customizations/logo/default.svg', use_column_width="always")
@@ -271,31 +272,67 @@ if username != "demo":
             for i in sorted(rails_dict.keys()): st.markdown(f"{i}. {rails_dict[i]}")
         st.divider()
 
-        # Opciones de Chat
+        # --- Opciones de Chat (Leen los defaults de secrets.toml) ---
         st.subheader(lang_dict.get('options_header', "Chat Options"))
+
+        # Cargar los defaults para el usuario actual desde secrets.toml
+        user_defaults = st.secrets.get("DEFAULT_SETTINGS", {}).get(username, {})
+
         disable_chat_history = st.toggle(lang_dict.get('disable_chat_history', "Disable Chat History"), value=False)
-        top_k_history = st.slider(lang_dict.get('k_chat_history', "K for Chat History"), 1, 10, 5, disabled=disable_chat_history)
+        top_k_history = st.slider(
+            lang_dict.get('k_chat_history', "K for Chat History"), 1, 10,
+            value=user_defaults.get("TOP_K_HISTORY", 5), # <-- VALOR POR DEFECTO DESDE SECRETS
+            disabled=disable_chat_history
+        )
         disable_vector_store = st.toggle(lang_dict.get('disable_vector_store', "Disable Vector Store?"), value=False)
-        top_k_vectorstore = st.slider(lang_dict.get('top_k_vector_store', "Top-K for Vector Store"), 1, 50, 5, disabled=disable_vector_store)
-        strategy = st.selectbox(lang_dict.get('rag_strategy', "RAG Strategy"), ('Basic Retrieval', 'Maximal Marginal Relevance', 'Fusion'), disabled=disable_vector_store)
+        top_k_vectorstore = st.slider(
+            lang_dict.get('top_k_vector_store', "Top-K for Vector Store"), 1, 50,
+            value=user_defaults.get("TOP_K_VECTORSTORE", 5), # <-- VALOR POR DEFECTO DESDE SECRETS
+            disabled=disable_vector_store
+        )
         
+        rag_strategies = ('Basic Retrieval', 'Maximal Marginal Relevance', 'Fusion')
+        default_strategy = user_defaults.get("RAG_STRATEGY", 'Basic Retrieval')
+        strategy_idx = rag_strategies.index(default_strategy) if default_strategy in rag_strategies else 0
+        strategy = st.selectbox(
+            lang_dict.get('rag_strategy', "RAG Strategy"), rag_strategies,
+            index=strategy_idx, # <-- VALOR POR DEFECTO DESDE SECRETS
+            disabled=disable_vector_store
+        )
+        
+        # Carga de prompt personalizado
         custom_prompt_text_val = ""
         prompt_options = ('Short results', 'Extended results', 'Custom')
-        prompt_idx = 0
+        default_prompt_type = user_defaults.get("PROMPT_TYPE", 'Custom')
+        prompt_idx = prompt_options.index(default_prompt_type) if default_prompt_type in prompt_options else 2
+
         try:
             user_prompt_file = Path(f"./customizations/prompt/{username}.txt")
+            default_prompt_file = Path("./customizations/prompt/default.txt")
             if user_prompt_file.is_file():
                 custom_prompt_text_val = user_prompt_file.read_text(encoding='utf-8')
-                prompt_idx = 2
+            elif default_prompt_file.is_file():
+                custom_prompt_text_val = default_prompt_file.read_text(encoding='utf-8')
             else:
-                custom_prompt_text_val = Path("./customizations/prompt/default.txt").read_text(encoding='utf-8')
-        except: pass
-        prompt_type = st.selectbox(lang_dict.get('system_prompt', "System Prompt"), prompt_options, index=prompt_idx)
-        custom_prompt = st.text_area(lang_dict.get('custom_prompt', "Custom Prompt"), value=custom_prompt_text_val, disabled=(prompt_type != 'Custom'))
-        
+                # Pega aquí tu prompt avanzado completo como fallback
+                custom_prompt_text_val = """### ROL Y PERSONALIDAD ###
+Actúa como un Analista Estratégico Senior..."""
+        except Exception as e:
+            st.warning(f"Could not load prompt file: {e}")
+            custom_prompt_text_val = "Error loading prompt file."
+
+        prompt_type = st.selectbox(
+            lang_dict.get('system_prompt', "System Prompt"), prompt_options,
+            index=prompt_idx # <-- VALOR POR DEFECTO DESDE SECRETS
+        )
+        custom_prompt = st.text_area(
+            lang_dict.get('custom_prompt', "Custom Prompt"),
+            value=custom_prompt_text_val, 
+            disabled=(prompt_type != 'Custom')
+        )
         st.divider()
 
-        # Herramientas de Administración
+        # Herramientas de Administración (Solo visibles para admins)
         if username in ADMIN_USERS:
             st.subheader(lang_dict.get('admin_tools_header', "Admin Tools"))
             with st.expander("Upload Files"):
@@ -307,21 +344,37 @@ if username != "demo":
                 if st.button("Process URLs"):
                     urls = [url.strip() for url in urls_text.split(',') if url.strip()]
                     if urls: vectorize_url(urls, vectorstore, lang_dict)
-else: # Si el usuario es 'demo'
-    st.markdown("""<style>[data-testid="stSidebar"] {display: none}</style>""", unsafe_allow_html=True)
-    disable_chat_history = False
-    top_k_history = 5
-    disable_vector_store = False
-    top_k_vectorstore = 3
-    strategy = 'Basic Retrieval'
-    prompt_type = 'Short results'
-    try: custom_prompt = Path("./customizations/prompt/default.txt").read_text(encoding='utf-8')
-    except: custom_prompt = ""
 
-# Inicializar memoria
+else: # Si el usuario es 'demo', la sidebar no se muestra y usamos valores por defecto.
+    # Inyectar CSS para ocultar la sidebar
+    st.markdown("""<style>[data-testid="stSidebar"] {display: none}</style>""", unsafe_allow_html=True)
+    
+    # Cargar los defaults para el usuario 'demo' desde secrets.toml
+    user_defaults = st.secrets.get("DEFAULT_SETTINGS", {}).get(username, {})
+
+    # Definir valores por defecto para que la app no falle
+    disable_chat_history = False
+    top_k_history = user_defaults.get("TOP_K_HISTORY", 5)
+    disable_vector_store = False
+    top_k_vectorstore = user_defaults.get("TOP_K_VECTORSTORE", 3)
+    strategy = user_defaults.get("RAG_STRATEGY", 'Basic Retrieval')
+    prompt_type = user_defaults.get("PROMPT_TYPE", 'Custom')
+    
+    # Cargar el prompt personalizado para el modo demo
+    try:
+        custom_prompt = Path(f"./customizations/prompt/{username}.txt").read_text(encoding='utf-8')
+    except:
+        try:
+            custom_prompt = Path("./customizations/prompt/default.txt").read_text(encoding='utf-8')
+        except:
+            # Pega aquí tu prompt avanzado completo como fallback
+            custom_prompt = """### ROL Y PERSONALIDAD ###
+Actúa como un Analista Estratégico Senior..."""
+
+# Inicializar memoria (fuera del if/else para que ambos tipos de usuario la tengan)
 memory = load_memory_rc(chat_history, top_k_history if not disable_chat_history else 0) if chat_history else None
 
-# --- Interfaz Principal del Chat ---
+# --- Interfaz Principal del Chat (Visible para TODOS los usuarios) ---
 if 'messages' not in st.session_state:
     st.session_state.messages = [AIMessage(content=lang_dict.get('assistant_welcome', "Welcome!"))]
 for message in st.session_state.messages:
