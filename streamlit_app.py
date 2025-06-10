@@ -27,9 +27,8 @@ import openai
 ASTRA_DB_COLLECTION_NAME = "vc_assistant"
 ADMIN_USERS = ["openlab_admin"] 
 
-
 print("Streamlit App Started")
-st.set_page_config(page_title='AI VC Assistant', page_icon='🚀', layout="wide")
+st.set_page_config(page_title='AI Assistant for Investors', page_icon='🚀', layout="wide")
 
 # --- INICIALIZACIÓN DE SESSION STATE ---
 if "session_id" not in st.session_state:
@@ -65,7 +64,7 @@ def check_password():
     if st.session_state.get('password_correct', False):
         return True
     login_form()
-    if "password_correct" in st.session_state and not st.session_state.password_correct:
+    if "password_correct" in st.session_state and not st.session_state['password_correct']:
         st.error('😕 Usuario desconocido o contraseña incorrecta')
     return False
 
@@ -86,34 +85,28 @@ def vectorize_text(uploaded_files, vectorstore, lang_dict):
                 with tempfile.NamedTemporaryFile(delete=False, suffix=Path(uploaded_file.name).suffix) as tmp_file:
                     tmp_file.write(uploaded_file.getvalue())
                     tmp_file_path = tmp_file.name
-
+                
                 st.session_state.debug_messages.append(f"Admin: Processing file {uploaded_file.name}")
                 try:
                     docs = []
                     if uploaded_file.name.endswith('.pdf'):
                         loader = PyPDFLoader(tmp_file_path)
                         docs = loader.load()
-                        # ---- INICIO DE CORRECCIÓN PARA PDF ----
                         for doc in docs:
                             doc.metadata["source"] = uploaded_file.name
-                        # ---- FIN DE CORRECCIÓN PARA PDF ----
                     elif uploaded_file.name.endswith('.csv'):
                         loader = CSVLoader(tmp_file_path, encoding='utf-8')
                         docs = loader.load()
-                        # ---- INICIO DE CORRECCIÓN PARA CSV ----
                         for doc in docs:
                             doc.metadata["source"] = uploaded_file.name
-                        # ---- FIN DE CORRECCIÓN PARA CSV ----
                     elif uploaded_file.name.endswith('.txt'):
                         from langchain.schema import Document
                         with open(tmp_file_path, 'r', encoding='utf-8') as f_txt:
-                            # ---- CORRECCIÓN PARA TXT ----
                             docs = [Document(page_content=f_txt.read(), metadata={"source": uploaded_file.name})]
                     else:
                         st.warning(f"Unsupported file type: {uploaded_file.name}")
-                        os.remove(tmp_file_path) # Limpiar archivo temporal
                         continue
-
+                    
                     if docs:
                         text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
                         pages = text_splitter.split_documents(docs)
@@ -123,7 +116,7 @@ def vectorize_text(uploaded_files, vectorstore, lang_dict):
                     st.error(f"Error processing file {uploaded_file.name}: {e}")
                 finally:
                     if os.path.exists(tmp_file_path):
-                        os.remove(tmp_file_path) # Asegurarse de que el archivo temporal se borre
+                        os.remove(tmp_file_path)
 
 def vectorize_url(urls, vectorstore, lang_dict):
     if not vectorstore:
@@ -171,14 +164,9 @@ If you don't know the answer, just say 'I do not know the answer'.
     
     return ChatPromptTemplate.from_messages([("system", template)])
 
-# ---- FUNCIÓN AÑADIDA ----
 def load_retriever(vectorstore, top_k_vectorstore):
     print(f"""load_retriever with top_k_vectorstore='{top_k_vectorstore}'""")
-    # Get the Retriever from the Vectorstore
-    return vectorstore.as_retriever(
-        search_kwargs={"k": top_k_vectorstore}
-    )
-# -------------------------
+    return vectorstore.as_retriever(search_kwargs={"k": top_k_vectorstore})
 
 def generate_queries(model, language):
     prompt = f"""You are a helpful assistant that generates multiple search queries based on a single input query in language {language}.
@@ -195,7 +183,7 @@ def reciprocal_rank_fusion(results: list[list], k=60):
                 doc_str = dumps(doc)
                 if doc_str not in fused_scores: fused_scores[doc_str] = 0
                 fused_scores[doc_str] += 1 / (rank + k)
-            except: continue
+            except Exception: continue
     return [(loads(doc), score) for doc, score in sorted(fused_scores.items(), key=lambda x: x[1], reverse=True)]
 
 
@@ -246,6 +234,7 @@ def load_model_rc():
 
 @st.cache_resource()
 def load_memory_rc(_chat_history, top_k_history):
+    if not _chat_history: return None
     return ConversationBufferWindowMemory(
         chat_memory=_chat_history, return_messages=True, k=top_k_history,
         memory_key="chat_history", input_key="question", output_key='answer')
@@ -261,7 +250,6 @@ username = st.session_state.user
 language = st.secrets.get("languages", {}).get(username, "es_ES")
 lang_dict = load_localization(language)
 
-# Inicializar recursos
 embedding = load_embedding_rc()
 vectorstore = load_vectorstore_rc(username, embedding) if embedding else None
 chat_history = load_chat_history_rc(username, st.session_state.session_id) if vectorstore else None
@@ -269,7 +257,6 @@ model = load_model_rc()
 
 # 3. Configuración de Parámetros (Condicional según el usuario)
 if username != "demo":
-    # --- SIDEBAR PARA USUARIOS NORMALES / ADMINS ---
     with st.sidebar:
         # Logo, Logout, Rails...
         st.image('./customizations/logo/default.svg', use_column_width="always")
@@ -284,67 +271,38 @@ if username != "demo":
             for i in sorted(rails_dict.keys()): st.markdown(f"{i}. {rails_dict[i]}")
         st.divider()
 
-        # --- Opciones de Chat (Leen los defaults de secrets.toml) ---
+        # Opciones de Chat
         st.subheader(lang_dict.get('options_header', "Chat Options"))
-
-        # Cargar los defaults para el usuario actual desde secrets.toml
+        
         user_defaults = st.secrets.get("DEFAULT_SETTINGS", {}).get(username, {})
-
+        
         disable_chat_history = st.toggle(lang_dict.get('disable_chat_history', "Disable Chat History"), value=False)
-        top_k_history = st.slider(
-            lang_dict.get('k_chat_history', "K for Chat History"), 1, 10,
-            value=user_defaults.get("TOP_K_HISTORY", 5), # <-- VALOR POR DEFECTO DESDE SECRETS
-            disabled=disable_chat_history
-        )
+        top_k_history = st.slider(lang_dict.get('k_chat_history', "K for Chat History"), 1, 10, user_defaults.get("TOP_K_HISTORY", 5), disabled=disable_chat_history)
         disable_vector_store = st.toggle(lang_dict.get('disable_vector_store', "Disable Vector Store?"), value=False)
-        top_k_vectorstore = st.slider(
-            lang_dict.get('top_k_vector_store', "Top-K for Vector Store"), 1, 50,
-            value=user_defaults.get("TOP_K_VECTORSTORE", 5), # <-- VALOR POR DEFECTO DESDE SECRETS
-            disabled=disable_vector_store
-        )
+        top_k_vectorstore = st.slider(lang_dict.get('top_k_vectorstore', "Top-K for Vector Store"), 1, 10, user_defaults.get("TOP_K_VECTORSTORE", 5), disabled=disable_vector_store) # Changed range from 1-50 to 1-10 for UI
         
         rag_strategies = ('Basic Retrieval', 'Maximal Marginal Relevance', 'Fusion')
         default_strategy = user_defaults.get("RAG_STRATEGY", 'Basic Retrieval')
         strategy_idx = rag_strategies.index(default_strategy) if default_strategy in rag_strategies else 0
-        strategy = st.selectbox(
-            lang_dict.get('rag_strategy', "RAG Strategy"), rag_strategies,
-            index=strategy_idx, # <-- VALOR POR DEFECTO DESDE SECRETS
-            disabled=disable_vector_store
-        )
+        strategy = st.selectbox(lang_dict.get('rag_strategy', "RAG Strategy"), rag_strategies, index=strategy_idx, disabled=disable_vector_store)
         
-        # Carga de prompt personalizado
-        custom_prompt_text_val = ""
         prompt_options = ('Short results', 'Extended results', 'Custom')
         default_prompt_type = user_defaults.get("PROMPT_TYPE", 'Custom')
         prompt_idx = prompt_options.index(default_prompt_type) if default_prompt_type in prompt_options else 2
 
         try:
-            user_prompt_file = Path(f"./customizations/prompt/{username}.txt")
-            default_prompt_file = Path("./customizations/prompt/default.txt")
-            if user_prompt_file.is_file():
-                custom_prompt_text_val = user_prompt_file.read_text(encoding='utf-8')
-            elif default_prompt_file.is_file():
-                custom_prompt_text_val = default_prompt_file.read_text(encoding='utf-8')
-            else:
-                # Pega aquí tu prompt avanzado completo como fallback
-                custom_prompt_text_val = """### ROL Y PERSONALIDAD ###
-Actúa como un Analista Estratégico Senior..."""
-        except Exception as e:
-            st.warning(f"Could not load prompt file: {e}")
-            custom_prompt_text_val = "Error loading prompt file."
+            custom_prompt_text_val = Path(f"./customizations/prompt/{username}.txt").read_text(encoding='utf-8')
+        except:
+            try:
+                custom_prompt_text_val = Path("./customizations/prompt/default.txt").read_text(encoding='utf-8')
+            except:
+                custom_prompt_text_val = "Error: No se encontró el archivo de prompt default.txt"
 
-        prompt_type = st.selectbox(
-            lang_dict.get('system_prompt', "System Prompt"), prompt_options,
-            index=prompt_idx # <-- VALOR POR DEFECTO DESDE SECRETS
-        )
-        custom_prompt = st.text_area(
-            lang_dict.get('custom_prompt', "Custom Prompt"),
-            value=custom_prompt_text_val, 
-            disabled=(prompt_type != 'Custom')
-        )
+        prompt_type = st.selectbox(lang_dict.get('system_prompt', "System Prompt"), prompt_options, index=prompt_idx)
+        custom_prompt = st.text_area(lang_dict.get('custom_prompt', "Custom Prompt"), value=custom_prompt_text_val, disabled=(prompt_type != 'Custom'))
         st.divider()
 
-        # Herramientas de Administración (Solo visibles para admins)
+        # Herramientas de Administración
         if username in ADMIN_USERS:
             st.subheader(lang_dict.get('admin_tools_header', "Admin Tools"))
             with st.expander("Upload Files"):
@@ -356,42 +314,40 @@ Actúa como un Analista Estratégico Senior..."""
                 if st.button("Process URLs"):
                     urls = [url.strip() for url in urls_text.split(',') if url.strip()]
                     if urls: vectorize_url(urls, vectorstore, lang_dict)
-
-else: # Si el usuario es 'demo', la sidebar no se muestra y usamos valores por defecto.
-    # Inyectar CSS para ocultar la sidebar
+else: # Si el usuario es 'demo'
     st.markdown("""<style>[data-testid="stSidebar"] {display: none}</style>""", unsafe_allow_html=True)
-    
-    # Cargar los defaults para el usuario 'demo' desde secrets.toml
     user_defaults = st.secrets.get("DEFAULT_SETTINGS", {}).get(username, {})
-
-    # Definir valores por defecto para que la app no falle
-    disable_chat_history = False
-    top_k_history = user_defaults.get("TOP_K_HISTORY", 5)
+    disable_chat_history = True # Forzar a no tener memoria de chat
+    top_k_history = 0
     disable_vector_store = False
-    top_k_vectorstore = user_defaults.get("TOP_K_VECTORSTORE", 3)
+    top_k_vectorstore = user_defaults.get("TOP_K_VECTORSTORE", 5) # Default K para el retriever
     strategy = user_defaults.get("RAG_STRATEGY", 'Basic Retrieval')
     prompt_type = user_defaults.get("PROMPT_TYPE", 'Custom')
-    
-    # Cargar el prompt personalizado para el modo demo
     try:
-        custom_prompt = Path(f"./customizations/prompt/{username}.txt").read_text(encoding='utf-8')
+        custom_prompt = Path("./customizations/prompt/default.txt").read_text(encoding='utf-8')
     except:
-        try:
-            custom_prompt = Path("./customizations/prompt/default.txt").read_text(encoding='utf-8')
-        except:
-            # Pega aquí tu prompt avanzado completo como fallback
-            custom_prompt = """### ROL Y PERSONALIDAD ###
-Actúa como un Analista Estratégico Senior..."""
+        custom_prompt = "Responde basándote en el contexto proporcionado."
 
-# Inicializar memoria (fuera del if/else para que ambos tipos de usuario la tengan)
+# Inicializar memoria
 memory = load_memory_rc(chat_history, top_k_history if not disable_chat_history else 0) if chat_history else None
 
 # --- Interfaz Principal del Chat (Visible para TODOS los usuarios) ---
-if 'messages' not in st.session_state:
-    st.session_state.messages = [AIMessage(content=lang_dict.get('assistant_welcome', "Welcome!"))]
+st.title("AI Assistant for Investors")
+st.markdown("""
+Este es un asistente de AI entrenado con información obtenida de forma automática a través de numerosas fuentes relevantes del sector y procesada posteriormente por medio de agentes de AI espcializados, permitiedo que este chat pueda ofrecer respuestas fiables, contrastadas y actualizadas.
+""")
+st.divider()
+
+# Reiniciar el historial visible en cada carga si así se desea.
+# Si se quiere mantener el historial de la sesión, usar el bloque 'if not in session_state'
+# if 'messages' not in st.session_state:
+st.session_state.messages = [AIMessage(content=lang_dict.get('assistant_welcome', "Hola, soy tu asistente experto. ¿En qué puedo ayudarte?"))]
+
+# Mostrar mensajes del historial
 for message in st.session_state.messages:
     st.chat_message(message.type).markdown(message.content)
 
+# Input del usuario para la pregunta
 if question := st.chat_input(lang_dict.get('assistant_question', "Your question...")):
     st.session_state.messages.append(HumanMessage(content=question))
     with st.chat_message('human'):
@@ -407,6 +363,7 @@ if question := st.chat_input(lang_dict.get('assistant_question', "Your question.
             if not disable_vector_store:
                 retriever = load_retriever(vectorstore, top_k_vectorstore)
                 if retriever:
+                    # Lógica RAG completa
                     if strategy == 'Basic Retrieval':
                         relevant_documents = retriever.get_relevant_documents(query=question)
                     elif strategy == 'Maximal Marginal Relevance':
@@ -415,8 +372,9 @@ if question := st.chat_input(lang_dict.get('assistant_question', "Your question.
                         generate_queries_chain_instance = generate_queries(model, language)
                         if generate_queries_chain_instance:
                             fusion_queries = generate_queries_chain_instance.invoke({"original_query": question})
-                            chain_fusion = generate_queries | retriever.map() | reciprocal_rank_fusion
-                            fused_results = chain_fusion.invoke({"original_query": question})
+                            # Mostrar las queries de fusión si es necesario...
+                            retrieved_docs_lists = retriever.map().invoke(fusion_queries)
+                            fused_results = reciprocal_rank_fusion(retrieved_docs_lists)
                             relevant_documents = [doc_tuple[0] for doc_tuple in fused_results][:top_k_vectorstore]
             
             history = memory.load_memory_variables({}) if memory else {"chat_history": []}
@@ -434,25 +392,10 @@ if question := st.chat_input(lang_dict.get('assistant_question', "Your question.
                     {'question': question, 'chat_history': history.get('chat_history', []), 'context': relevant_documents}, 
                     config={'callbacks': [StreamHandler(response_placeholder)]}
                 )
-             final_content = response.content
-              if memory: memory.save_context({'question': question}, {'answer': final_content})
-
-              # --- BLOQUE DE FUENTES COMENTADO ---
-              # El siguiente bloque 'if' que añadía la lista de fuentes a la respuesta ha sido comentado.
-              # if not disable_vector_store and relevant_documents:
-              #     final_content += f"\n\n*{lang_dict.get('sources_used','Fuentes:')}*"
-              #     sources_used = []
-              #     for doc in relevant_documents:
-              #         source_name = doc.metadata.get('source', 'Unknown')
-              #         source_basename = os.path.basename(os.path.normpath(source_name))
-              #         if source_basename not in sources_used:
-              #             final_content += f"\n📙 :orange[{source_basename}]"
-              #             sources_used.append(source_basename)
-              # --- FIN DEL BLOQUE COMENTADO ---
-              
-              # Ahora 'final_content' solo contiene la respuesta pura del LLM.
-              # Mostramos y guardamos esa respuesta limpia en el historial.
-              response_placeholder.markdown(final_content)
-              st.session_state.messages.append(AIMessage(content=final_content))
-          except Exception as e:
-              st.error(f"Error during response generation: {e}")
+                final_content = response.content
+                if memory: memory.save_context({'question': question}, {'answer': final_content})
+                
+                response_placeholder.markdown(final_content) # Escribir la respuesta final sin las fuentes
+                st.session_state.messages.append(AIMessage(content=final_content))
+            except Exception as e:
+                st.error(f"Error during response generation: {e}")
