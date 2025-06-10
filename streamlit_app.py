@@ -216,12 +216,28 @@ def load_vectorstore_rc(username, _embedding): # Underscore to prevent hashing
 
 @st.cache_resource(show_spinner="Loading chat history...")
 def load_chat_history_rc(username, session_id):
-    return AstraDBChatMessageHistory(
-        session_id=f"{username}_{str(session_id)}",
-        api_endpoint=st.secrets.get("ASTRA_ENDPOINT", os.environ.get("ASTRA_ENDPOINT")),
-        token=st.secrets["ASTRA_TOKEN"],
-        keyspace_name=st.secrets.get("ASTRA_KEYSPACE")
-    )
+    print(f"load_chat_history_rc for {username}_{session_id}")
+    try:
+        astra_token_val = st.secrets.get("ASTRA_TOKEN")
+        astra_endpoint_val = st.secrets.get("ASTRA_ENDPOINT", os.environ.get("ASTRA_ENDPOINT"))
+
+        if not astra_token_val or not astra_endpoint_val:
+            st.error("Astra DB Token or API Endpoint not found for chat history.")
+            return None
+
+        # La clase AstraDBChatMessageHistory no usa 'keyspace_name'.
+        # Usará el keyspace por defecto de tu base de datos.
+        # Sí acepta un 'collection_name' opcional (por defecto es 'message_store').
+        # Es una buena práctica definirlo explícitamente.
+        return AstraDBChatMessageHistory(
+            session_id=f"{username}_{str(session_id)}",
+            api_endpoint=astra_endpoint_val,
+            token=astra_token_val,
+            collection_name="historial_chat_asistente" # Usamos una colección separada para el historial
+        )
+    except Exception as e:
+        st.error(f"Error initializing AstraDB chat history: {e}")
+        return None
 
 @st.cache_resource(show_spinner="Loading AI model...")
 def load_model_rc():
