@@ -434,20 +434,25 @@ if question := st.chat_input(lang_dict.get('assistant_question', "Your question.
                     {'question': question, 'chat_history': history.get('chat_history', []), 'context': relevant_documents}, 
                     config={'callbacks': [StreamHandler(response_placeholder)]}
                 )
-                final_content = response.content
-                if memory: memory.save_context({'question': question}, {'answer': final_content})
+             final_content = response.content
+              if memory: memory.save_context({'question': question}, {'answer': final_content})
 
-                if not disable_vector_store and relevant_documents:
-                    final_content += f"\n\n*{lang_dict.get('sources_used','Fuentes:')}*"
-                    sources_used = []
-                    for doc in relevant_documents:
-                        source_name = doc.metadata.get('source', 'Unknown')
-                        source_basename = os.path.basename(os.path.normpath(source_name))
-                        if source_basename not in sources_used:
-                            final_content += f"\n📙 :orange[{source_basename}]"
-                            sources_used.append(source_basename)
-                
-                response_placeholder.markdown(final_content)
-                st.session_state.messages.append(AIMessage(content=final_content))
-            except Exception as e:
-                st.error(f"Error during response generation: {e}")
+              # --- BLOQUE DE FUENTES COMENTADO ---
+              # El siguiente bloque 'if' que añadía la lista de fuentes a la respuesta ha sido comentado.
+              # if not disable_vector_store and relevant_documents:
+              #     final_content += f"\n\n*{lang_dict.get('sources_used','Fuentes:')}*"
+              #     sources_used = []
+              #     for doc in relevant_documents:
+              #         source_name = doc.metadata.get('source', 'Unknown')
+              #         source_basename = os.path.basename(os.path.normpath(source_name))
+              #         if source_basename not in sources_used:
+              #             final_content += f"\n📙 :orange[{source_basename}]"
+              #             sources_used.append(source_basename)
+              # --- FIN DEL BLOQUE COMENTADO ---
+              
+              # Ahora 'final_content' solo contiene la respuesta pura del LLM.
+              # Mostramos y guardamos esa respuesta limpia en el historial.
+              response_placeholder.markdown(final_content)
+              st.session_state.messages.append(AIMessage(content=final_content))
+          except Exception as e:
+              st.error(f"Error during response generation: {e}")
