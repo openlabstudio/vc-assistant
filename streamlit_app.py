@@ -86,32 +86,44 @@ def vectorize_text(uploaded_files, vectorstore, lang_dict):
                 with tempfile.NamedTemporaryFile(delete=False, suffix=Path(uploaded_file.name).suffix) as tmp_file:
                     tmp_file.write(uploaded_file.getvalue())
                     tmp_file_path = tmp_file.name
-                
+
                 st.session_state.debug_messages.append(f"Admin: Processing file {uploaded_file.name}")
                 try:
                     docs = []
                     if uploaded_file.name.endswith('.pdf'):
                         loader = PyPDFLoader(tmp_file_path)
-                        docs = loader.load_and_split()
+                        docs = loader.load()
+                        # ---- INICIO DE CORRECCIÓN PARA PDF ----
+                        for doc in docs:
+                            doc.metadata["source"] = uploaded_file.name
+                        # ---- FIN DE CORRECCIÓN PARA PDF ----
                     elif uploaded_file.name.endswith('.csv'):
                         loader = CSVLoader(tmp_file_path, encoding='utf-8')
                         docs = loader.load()
+                        # ---- INICIO DE CORRECCIÓN PARA CSV ----
+                        for doc in docs:
+                            doc.metadata["source"] = uploaded_file.name
+                        # ---- FIN DE CORRECCIÓN PARA CSV ----
                     elif uploaded_file.name.endswith('.txt'):
                         from langchain.schema import Document
                         with open(tmp_file_path, 'r', encoding='utf-8') as f_txt:
-                            text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
-                            docs = text_splitter.create_documents([f_txt.read()], metadatas=[{"source": uploaded_file.name}])
+                            # ---- CORRECCIÓN PARA TXT ----
+                            docs = [Document(page_content=f_txt.read(), metadata={"source": uploaded_file.name})]
                     else:
                         st.warning(f"Unsupported file type: {uploaded_file.name}")
+                        os.remove(tmp_file_path) # Limpiar archivo temporal
                         continue
-                    
+
                     if docs:
-                        vectorstore.add_documents(docs)
-                        st.info(f"✅ {uploaded_file.name} processed ({len(docs)} segments).")
+                        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
+                        pages = text_splitter.split_documents(docs)
+                        vectorstore.add_documents(pages)
+                        st.info(f"✅ {uploaded_file.name} processed ({len(pages)} segments).")
                 except Exception as e:
                     st.error(f"Error processing file {uploaded_file.name}: {e}")
                 finally:
-                    os.remove(tmp_file_path)
+                    if os.path.exists(tmp_file_path):
+                        os.remove(tmp_file_path) # Asegurarse de que el archivo temporal se borre
 
 def vectorize_url(urls, vectorstore, lang_dict):
     if not vectorstore:
