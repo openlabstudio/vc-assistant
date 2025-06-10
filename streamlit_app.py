@@ -336,7 +336,7 @@ else: # Si el usuario es 'demo'
         custom_prompt = ""
 
 # Inicializar memoria (fuera del if/else para que ambos tipos de usuario la tengan)
-memory = load_memory_cached(chat_history, top_k_history if not disable_chat_history else 0) if chat_history else None
+memory = load_memory_rc(chat_history, top_k_history if not disable_chat_history else 0)
 
 # --- Interfaz Principal del Chat (Visible para TODOS los usuarios) ---
 if 'messages' not in st.session_state:
