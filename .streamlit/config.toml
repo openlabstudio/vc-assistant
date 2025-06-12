@@ -1,12 +1,18 @@
+# Esto es lo que ya tenías para la configuración del logger
 [logger]
-
-# Level of logging: 'error', 'warning', 'info', or 'debug'.
-# Default: 'info'
 level = "info"
-
-# String format for logging messages. If logger.datetimeFormat is set,
-# logger messages will default to `%(asctime)s.%(msecs)03d %(message)s`. See
-# Python's documentation for available attributes:
-# https://docs.python.org/2.6/library/logging.html#formatter-objects
-# Default: "%(asctime)s %(message)s"
 messageFormat = "%(asctime)s %(levelname)s: %(message)s"
+
+# --- AÑADE ESTE NUEVO BLOQUE DEBAJO ---
+[theme]
+# Color de fondo principal (un gris oscuro)
+backgroundColor="#212121"
+
+# Color de fondo secundario (para elementos como la sidebar, si se muestra)
+secondaryBackgroundColor="#2E2E2E"
+
+# Color del texto principal
+textColor="#FFFFFF"
+
+# Fuente principal
+font="sans serif"
