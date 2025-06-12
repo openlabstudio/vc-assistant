@@ -28,7 +28,7 @@ ASTRA_DB_COLLECTION_NAME = "vc_assistant"
 ADMIN_USERS = ["openlab_admin"] 
 
 print("Streamlit App Started")
-st.set_page_config(page_title='AI Assistant for Investors', page_icon='🚀', layout="wide")
+st.set_page_config(page_title=" ", page_icon='./customizations/logo/anim-logo-1fps-verde.gif', layout="wide")
 
 # --- INICIALIZACIÓN DE SESSION STATE ---
 if "session_id" not in st.session_state:
@@ -418,9 +418,12 @@ except Exception:
 # El logo se añadirá aquí en el siguiente paso
 # st.image("./customizations/logo/openlab_logo.png", width=100) 
 
-st.markdown("<h1>Agente Experto IA para Fondos</h1>", unsafe_allow_html=True)
-st.markdown("Por OPENLAB")
-st.caption("Tu consultor virtual especializado en la introducción estratégica de la Inteligencia Artificial en los procesos internos de Venture Capital y Private Equity.")
+# <--- MEJORA: Agrupamos todos los textos en un solo st.markdown para garantizar el centrado
+st.markdown("""
+    <h1>Agente Experto IA para Fondos</h1>
+    <p>Por OPENLAB VENTURES, S.L. ®</p>
+    <p style="color: #9c9d9f; font-size: 0.9rem;">Tu consultor virtual especializado en la introducción estratégica de la Inteligencia Artificial en los procesos internos de Venture Capital y Private Equity.</p>
+""", unsafe_allow_html=True)
 
 st.markdown('</div>', unsafe_allow_html=True)
 
