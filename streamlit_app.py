@@ -369,34 +369,46 @@ except Exception:
 # --- INICIO DE MODIFICACIONES DE UI ---
 
 # 1. Inyectar CSS para centrar y limitar el ancho del contenido principal
+# <--- MEJORA: CSS actualizado para centrar TODO el contenido, incluido el chat_input.
 st.markdown("""
     <style>
-        /* Apunta al contenedor principal de la app */
+        /* Contenedor principal para los mensajes y el encabezado */
         section[data-testid="st.main"] .block-container {
-            max-width: 850px; /* Ancho máximo del contenido (aprox. 2/4 de una pantalla ancha) */
-            margin: 0 auto;  /* Esto centra el bloque en la página */
+            max-width: 65%; /* Ancho del contenido principal */
+            margin: 0 auto;  /* Centrado automático */
+            padding: 2rem 0;
         }
-        /* Un contenedor personalizado para nuestro encabezado */
+
+        /* Contenedor del campo de texto del chat */
+        [data-testid="stChatInputContainer"] {
+            max-width: 65%;
+            margin: 0 auto;
+        }
+
         .header-container {
-            text-align: center; /* Centra todo el texto dentro de este contenedor */
-            padding-bottom: 2rem; /* Añade un poco de espacio debajo */
+            text-align: center;
+            padding-bottom: 2rem;
         }
-        /* Ajustar el tamaño del título principal */
         .header-container h1 {
             font-size: 2.5rem;
         }
     </style>
-    """, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
 # 2. Contenedor para el Logo y Encabezado
 # Usamos st.markdown con HTML para poder aplicar el centrado
 st.markdown('<div class="header-container">', unsafe_allow_html=True)
-
+try:
+    # VAMOS A CAMBIAR ESTA LÍNEA
+    st.image("./customizations/logo/anim-logo-1fps-verde.gif", width=200) # <--- AJUSTA ESTE NÚMERO
+except Exception:
+    st.markdown("### OPENLAB VENTURES")
+# ... resto del encabezado ...
 # El logo se añadirá aquí en el siguiente paso
 # st.image("./customizations/logo/openlab_logo.png", width=100) 
 
 st.markdown("<h1>Agente Experto IA para Fondos</h1>", unsafe_allow_html=True)
-st.markdown("Por OPENLAB VENTURES, S.L. Ⓡ")
+st.markdown("Por OPENLAB")
 st.caption("Tu consultor virtual especializado en la introducción estratégica de la Inteligencia Artificial en los procesos internos de Venture Capital y Private Equity.")
 
 st.markdown('</div>', unsafe_allow_html=True)
