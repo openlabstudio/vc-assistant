@@ -362,7 +362,7 @@ st.markdown("""
 # Asume que tienes un logo en la ruta 'customizations/logo/openlab_logo.png'
 # Si no lo tienes, puedes comentar la línea de st.image
 try:
-    st.image("./customizations/logo/openlab_logo.png", width=100) # Ajusta la ruta y el ancho
+    st.image("./customizations/logo/linkedin-corporate-icon.png", width=100) # Ajusta la ruta y el ancho
 except Exception:
     st.write("Logo de OPENLAB VENTURES") # Fallback si no encuentra la imagen
 
