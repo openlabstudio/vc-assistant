@@ -369,7 +369,9 @@ except Exception:
 # --- INICIO DE MODIFICACIONES DE UI ---
 
 # 1. Inyectar CSS para centrar y limitar el ancho del contenido principal
-# <--- MEJORA: CSS actualizado para centrar TODO el contenido, incluido el chat_input.
+# PEGAR ESTE CÓDIGO ▼ (Reemplazando la versión anterior)
+# <--- MEJORA: CSS actualizado para centrar TODO el contenido, incluido el chat_input y el logo.
+
 st.markdown("""
     <style>
         /* Contenedor principal para los mensajes y el encabezado */
@@ -386,9 +388,18 @@ st.markdown("""
         }
 
         .header-container {
-            text-align: center;
+            text-align: center; /* Centra el texto (títulos, captions) */
             padding-bottom: 2rem;
         }
+
+        /* --- NUEVA REGLA PARA CENTRAR EL LOGO --- */
+        .header-container img {
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        /* --- FIN DE LA NUEVA REGLA --- */
+
         .header-container h1 {
             font-size: 2.5rem;
         }
