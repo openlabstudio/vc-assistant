@@ -279,7 +279,7 @@ if username != "demo":
         disable_chat_history = st.toggle(lang_dict.get('disable_chat_history', "Disable Chat History"), value=False)
         top_k_history = st.slider(lang_dict.get('k_chat_history', "K for Chat History"), 1, 10, user_defaults.get("TOP_K_HISTORY", 5), disabled=disable_chat_history)
         disable_vector_store = st.toggle(lang_dict.get('disable_vector_store', "Disable Vector Store?"), value=False)
-        top_k_vectorstore = st.slider(lang_dict.get('top_k_vectorstore', "Top-K for Vector Store"), 1, 10, user_defaults.get("TOP_K_VECTORSTORE", 5), disabled=disable_vector_store) # Changed range from 1-50 to 1-10 for UI
+        top_k_vectorstore = st.slider(lang_dict.get('top_k_vectorstore', "Top-K for Vector Store"), 1, 10, user_defaults.get("TOP_K_VECTORSTORE", 5), disabled=disable_vector_store)
         
         rag_strategies = ('Basic Retrieval', 'Maximal Marginal Relevance', 'Fusion')
         default_strategy = user_defaults.get("RAG_STRATEGY", 'Basic Retrieval')
@@ -315,16 +315,24 @@ if username != "demo":
                     urls = [url.strip() for url in urls_text.split(',') if url.strip()]
                     if urls: vectorize_url(urls, vectorstore, lang_dict)
 else: # Si el usuario es 'demo'
+    # Inyectar CSS para ocultar la sidebar
     st.markdown("""<style>[data-testid="stSidebar"] {display: none}</style>""", unsafe_allow_html=True)
+    
+    # Definir valores por defecto para que la app no falle
     user_defaults = st.secrets.get("DEFAULT_SETTINGS", {}).get(username, {})
-    disable_chat_history = True # Forzar a no tener memoria de chat
+    disable_chat_history = True
     top_k_history = 0
     disable_vector_store = False
-    top_k_vectorstore = user_defaults.get("TOP_K_VECTORSTORE", 5) # Default K para el retriever
+    top_k_vectorstore = user_defaults.get("TOP_K_VECTORSTORE", 5)
     strategy = user_defaults.get("RAG_STRATEGY", 'Basic Retrieval')
     prompt_type = user_defaults.get("PROMPT_TYPE", 'Custom')
     try:
-        custom_prompt = Path("./customizations/prompt/default.txt").read_text(encoding='utf-8')
+        # Intenta cargar el prompt para 'demo' o el default
+        user_prompt_file = Path(f"./customizations/prompt/demo.txt")
+        if user_prompt_file.is_file():
+            custom_prompt = user_prompt_file.read_text(encoding='utf-8')
+        else:
+            custom_prompt = Path("./customizations/prompt/default.txt").read_text(encoding='utf-8')
     except:
         custom_prompt = "Responde basándote en el contexto proporcionado."
 
@@ -332,28 +340,81 @@ else: # Si el usuario es 'demo'
 memory = load_memory_rc(chat_history, top_k_history if not disable_chat_history else 0) if chat_history else None
 
 # --- Interfaz Principal del Chat (Visible para TODOS los usuarios) ---
-st.title("AI Assistant for Investors")
+
+# --- INICIO DE MODIFICACIONES DE UI ---
+
+# 1. Inyectar CSS para centrar el contenido principal
 st.markdown("""
-Este es un asistente de AI entrenado con información obtenida de forma automática a través de numerosas fuentes relevantes del sector y procesada posteriormente por medio de agentes de AI espcializados, permitiedo que este chat pueda ofrecer respuestas fiables, contrastadas y actualizadas.
-""")
-st.divider()
+    <style>
+        .block-container {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+        }
+        /* Apunta al contenedor principal de la app */
+        section[data-testid="st.main"] .block-container {
+            max-width: 850px; /* Ancho máximo del contenido */
+            margin: 0 auto;  /* Centrar el bloque */
+        }
+    </style>
+    """, unsafe_allow_html=True)
 
-# Reiniciar el historial visible en cada carga si así se desea.
-# Si se quiere mantener el historial de la sesión, usar el bloque 'if not in session_state'
-# if 'messages' not in st.session_state:
-st.session_state.messages = [AIMessage(content=lang_dict.get('assistant_welcome', "Hola, soy tu asistente experto. ¿En qué puedo ayudarte?"))]
+# 2. Añadir Logo, Título y Descripción en el área principal
+# Asume que tienes un logo en la ruta 'customizations/logo/openlab_logo.png'
+# Si no lo tienes, puedes comentar la línea de st.image
+try:
+    st.image("./customizations/logo/openlab_logo.png", width=100) # Ajusta la ruta y el ancho
+except Exception:
+    st.write("Logo de OPENLAB VENTURES") # Fallback si no encuentra la imagen
 
-# Mostrar mensajes del historial
+st.title("Agente Experto IA para Fondos")
+st.caption("Por OPENLAB VENTURES, S.L. Ⓡ")
+st.markdown("Tu consultor virtual especializado en la introducción estratégica de la Inteligencia Artificial en los procesos internos de Venture Capital y Private Equity.")
+
+st.divider() # Línea de separación
+
+# 3. Reiniciar el historial de chat visible y mostrar preguntas de ejemplo
+if 'messages' not in st.session_state or len(st.session_state.messages) == 0:
+    st.session_state.messages = [] # Empezar con la lista vacía
+    
+    # 4. Mostrar Preguntas de Ejemplo (Rails) como botones
+    rails_dict = load_rails(username)
+    if rails_dict:
+        st.write("O intenta con alguna de estas preguntas:")
+        # Crear columnas para los botones.
+        num_rails = len(rails_dict)
+        cols = st.columns(num_rails if num_rails <= 4 else 4) # Máximo 4 columnas
+        
+        # Crear un botón en cada columna
+        for i, (key, value) in enumerate(rails_dict.items()):
+            if i >= 4: break # Limitar a 4 botones de ejemplo
+            if cols[i].button(value, key=f"rail_{key}"):
+                st.session_state.question_from_button = value
+                st.rerun() 
+
+# --- FIN DE MODIFICACIONES DE UI ---
+
+# Mostrar mensajes del historial (si los hay)
 for message in st.session_state.messages:
-    st.chat_message(message.type).markdown(message.content)
+    # Cambiamos el icono del asistente aquí
+    avatar_icon = "🤖" if message.type == "ai" else None
+    st.chat_message(message.type, avatar=avatar_icon).markdown(message.content)
 
-# Input del usuario para la pregunta
-if question := st.chat_input(lang_dict.get('assistant_question', "Your question...")):
+# Lógica para procesar la pregunta, ya sea del chat_input o de un botón
+question = None
+if st.session_state.get("question_from_button"):
+    question = st.session_state.pop("question_from_button") # Usar y limpiar
+
+# Input del usuario para la pregunta (se evalúa después del botón)
+if user_query := st.chat_input(lang_dict.get('assistant_question', "Pregunta lo que quieras")):
+    question = user_query
+
+# Si tenemos una pregunta que procesar...
+if question:
     st.session_state.messages.append(HumanMessage(content=question))
     with st.chat_message('human'):
         st.markdown(question)
 
-    with st.chat_message('assistant'):
+    with st.chat_message('assistant', avatar="🤖"):
         response_placeholder = st.empty()
         
         if not model or (not disable_vector_store and not vectorstore):
@@ -363,7 +424,6 @@ if question := st.chat_input(lang_dict.get('assistant_question', "Your question.
             if not disable_vector_store:
                 retriever = load_retriever(vectorstore, top_k_vectorstore)
                 if retriever:
-                    # Lógica RAG completa
                     if strategy == 'Basic Retrieval':
                         relevant_documents = retriever.get_relevant_documents(query=question)
                     elif strategy == 'Maximal Marginal Relevance':
@@ -372,7 +432,7 @@ if question := st.chat_input(lang_dict.get('assistant_question', "Your question.
                         generate_queries_chain_instance = generate_queries(model, language)
                         if generate_queries_chain_instance:
                             fusion_queries = generate_queries_chain_instance.invoke({"original_query": question})
-                            # Mostrar las queries de fusión si es necesario...
+                            # (Lógica de Fusion RAG completa)
                             retrieved_docs_lists = retriever.map().invoke(fusion_queries)
                             fused_results = reciprocal_rank_fusion(retrieved_docs_lists)
                             relevant_documents = [doc_tuple[0] for doc_tuple in fused_results][:top_k_vectorstore]
