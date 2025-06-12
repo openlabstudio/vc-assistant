@@ -366,9 +366,40 @@ try:
 except Exception:
     st.write("Logo de OPENLAB VENTURES") # Fallback si no encuentra la imagen
 
-st.title("Agente Experto IA para Fondos")
-st.caption("Por OPENLAB VENTURES, S.L. Ⓡ")
-st.markdown("Tu consultor virtual especializado en la introducción estratégica de la Inteligencia Artificial en los procesos internos de Venture Capital y Private Equity.")
+# --- INICIO DE MODIFICACIONES DE UI ---
+
+# 1. Inyectar CSS para centrar y limitar el ancho del contenido principal
+st.markdown("""
+    <style>
+        /* Apunta al contenedor principal de la app */
+        section[data-testid="st.main"] .block-container {
+            max-width: 850px; /* Ancho máximo del contenido (aprox. 2/4 de una pantalla ancha) */
+            margin: 0 auto;  /* Esto centra el bloque en la página */
+        }
+        /* Un contenedor personalizado para nuestro encabezado */
+        .header-container {
+            text-align: center; /* Centra todo el texto dentro de este contenedor */
+            padding-bottom: 2rem; /* Añade un poco de espacio debajo */
+        }
+        /* Ajustar el tamaño del título principal */
+        .header-container h1 {
+            font-size: 2.5rem;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+# 2. Contenedor para el Logo y Encabezado
+# Usamos st.markdown con HTML para poder aplicar el centrado
+st.markdown('<div class="header-container">', unsafe_allow_html=True)
+
+# El logo se añadirá aquí en el siguiente paso
+# st.image("./customizations/logo/openlab_logo.png", width=100) 
+
+st.markdown("<h1>Agente Experto IA para Fondos</h1>", unsafe_allow_html=True)
+st.markdown("Por OPENLAB VENTURES, S.L. Ⓡ")
+st.caption("Tu consultor virtual especializado en la introducción estratégica de la Inteligencia Artificial en los procesos internos de Venture Capital y Private Equity.")
+
+st.markdown('</div>', unsafe_allow_html=True)
 
 st.divider() # Línea de separación
 
