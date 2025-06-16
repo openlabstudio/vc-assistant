@@ -26,6 +26,15 @@ import openai
 
 st.set_page_config(page_title=" ", page_icon='./customizations/logo/anim-logo-1fps-verde.gif', layout="wide")
 
+# ▼▼▼ ESTE ES EL BLOQUE QUE NECESITAS AÑADIR ▼▼▼
+# --- INICIALIZACIÓN DE SESSION STATE ---
+# Esto asegura que las variables de sesión existan desde el principio.
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "session_id" not in st.session_state:
+    st.session_state.session_id = str(uuid.uuid4())
+# ▲▲▲ FIN DEL BLOQUE A AÑADIR ▲▲▲
+
 
 # --- CONFIGURACIÓN GLOBAL ---
 ASTRA_DB_COLLECTION_NAME = "vc_assistant"
