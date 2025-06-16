@@ -32,7 +32,6 @@ ASTRA_DB_COLLECTION_NAME = "vc_assistant"
 ADMIN_USERS = ["openlab_admin"] 
 
 print("Streamlit App Started")
-st.set_page_config(page_title=" ", page_icon='./customizations/logo/anim-logo-1fps-verde.gif', layout="wide")
 
 
 # --- INICIALIZACIÓN DE SESSION STATE ---
