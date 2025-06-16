@@ -7,6 +7,7 @@ import uuid
 
 import streamlit as st
 
+
 from langchain_community.vectorstores import AstraDB
 from langchain_openai import OpenAIEmbeddings
 from langchain_openai import ChatOpenAI
@@ -23,12 +24,16 @@ from langchain.callbacks.base import BaseCallbackHandler
 
 import openai
 
+st.set_page_config(page_title=" ", page_icon='./customizations/logo/anim-logo-1fps-verde.gif', layout="wide")
+
+
 # --- CONFIGURACIÓN GLOBAL ---
 ASTRA_DB_COLLECTION_NAME = "vc_assistant"
 ADMIN_USERS = ["openlab_admin"] 
 
 print("Streamlit App Started")
 st.set_page_config(page_title=" ", page_icon='./customizations/logo/anim-logo-1fps-verde.gif', layout="wide")
+
 
 # --- INICIALIZACIÓN DE SESSION STATE ---
 if "session_id" not in st.session_state:
@@ -339,180 +344,138 @@ else: # Si el usuario es 'demo'
 # Inicializar memoria
 memory = load_memory_rc(chat_history, top_k_history if not disable_chat_history else 0) if chat_history else None
 
+# --- COPIA Y PEGA ESTE BLOQUE COMPLETO HASTA EL FINAL DEL ARCHIVO ---
+
 # --- Interfaz Principal del Chat (Visible para TODOS los usuarios) ---
 
-# --- INICIO DE MODIFICACIONES DE UI ---
-
-# 1. Inyectar CSS para centrar el contenido principal
-st.markdown("""
-    <style>
-        .block-container {
-            padding-top: 2rem;
-            padding-bottom: 2rem;
-        }
-        /* Apunta al contenedor principal de la app */
-        section[data-testid="st.main"] .block-container {
-            max-width: 850px; /* Ancho máximo del contenido */
-            margin: 0 auto;  /* Centrar el bloque */
-        }
-    </style>
-    """, unsafe_allow_html=True)
-
-# 2. Añadir Logo, Título y Descripción en el área principal
-# Asume que tienes un logo en la ruta 'customizations/logo/openlab_logo.png'
-# Si no lo tienes, puedes comentar la línea de st.image
-try:
-    st.image("./customizations/logo/anim-logo-1fps-verde.gif", width=100) # Ajusta la ruta y el ancho
-except Exception:
-    st.write("Logo de OPENLAB VENTURES") # Fallback si no encuentra la imagen
-
-# --- INICIO DE MODIFICACIONES DE UI ---
-
-# 1. Inyectar CSS para centrar y limitar el ancho del contenido principal
-# PEGAR ESTE CÓDIGO ▼ (Reemplazando la versión anterior)
-# <--- MEJORA: CSS actualizado para centrar TODO el contenido, incluido el chat_input y el logo.
-
+# 1. Inyectamos el CSS final para centrar el layout y el logo
 st.markdown("""
     <style>
         /* Contenedor principal para los mensajes y el encabezado */
         section[data-testid="st.main"] .block-container {
-            max-width: 65%; /* Ancho del contenido principal */
-            margin: 0 auto;  /* Centrado automático */
-            padding: 2rem 0;
+            max-width: 65%;
+            margin: 0 auto;
         }
-
         /* Contenedor del campo de texto del chat */
         [data-testid="stChatInputContainer"] {
             max-width: 65%;
             margin: 0 auto;
         }
-
-        .header-container {
-            text-align: center; /* Centra el texto (títulos, captions) */
-            padding-bottom: 2rem;
-        }
-
-        /* --- NUEVA REGLA PARA CENTRAR EL LOGO --- */
-        .header-container img {
-            display: block;
-            margin-left: auto;
-            margin-right: auto;
-        }
-        /* --- FIN DE LA NUEVA REGLA --- */
-
-        .header-container h1 {
-            font-size: 2.5rem;
-        }
     </style>
 """, unsafe_allow_html=True)
 
-# 2. Contenedor para el Logo y Encabezado
-# Usamos st.markdown con HTML para poder aplicar el centrado
-st.markdown('<div class="header-container">', unsafe_allow_html=True)
-try:
-    # VAMOS A CAMBIAR ESTA LÍNEA
-    st.image("./customizations/logo/anim-logo-1fps-verde.gif", width=200) # <--- AJUSTA ESTE NÚMERO
-except Exception:
-    st.markdown("### OPENLAB VENTURES")
-# ... resto del encabezado ...
-# El logo se añadirá aquí en el siguiente paso
-# st.image("./customizations/logo/openlab_logo.png", width=100) 
 
-# <--- MEJORA: Agrupamos todos los textos en un solo st.markdown para garantizar el centrado
-st.markdown("""
-    <h1>Agente Experto IA para Fondos</h1>
-    <p>Por OPENLAB VENTURES, S.L. ®</p>
-    <p style="color: #9c9d9f; font-size: 0.9rem;">Tu consultor virtual especializado en la introducción estratégica de la Inteligencia Artificial en los procesos internos de Venture Capital y Private Equity.</p>
+# 2. Definimos y mostramos el encabezado de forma robusta
+# Función para codificar la imagen a base64 (así la podemos meter en el HTML)
+import base64
+def get_image_as_base64(path):
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+        return base64.b64encode(data).decode()
+    except Exception:
+        return ""
+
+# Obtenemos la imagen del logo en base64
+logo_base64 = get_image_as_base64("./customizations/logo/anim-logo-1fps-verde.gif")
+
+# Un solo bloque de HTML para todo el encabezado, asegurando el centrado
+st.markdown(f"""
+    <div style="text-align: center;">
+        <img src="data:image/gif;base64,{logo_base64}" alt="Logo" width="150">
+        <h1>Agente Experto IA para Fondos</h1>
+        <p>Por OPENLAB VENTURES, S.L. ®</p>
+        <p style="color: #9c9d9f; font-size: 0.9rem;">Tu consultor virtual especializado en la introducción estratégica de la Inteligencia Artificial en los procesos internos de Venture Capital y Private Equity.</p>
+    </div>
 """, unsafe_allow_html=True)
 
-st.markdown('</div>', unsafe_allow_html=True)
+st.divider()
 
-st.divider() # Línea de separación
 
-# 3. Reiniciar el historial de chat visible y mostrar preguntas de ejemplo
-if 'messages' not in st.session_state or len(st.session_state.messages) == 0:
-    st.session_state.messages = [] # Empezar con la lista vacía
-    
-    # 4. Mostrar Preguntas de Ejemplo (Rails) como botones
+# 3. Lógica de visualización del chat
+# Mensajes de bienvenida y botones de sugerencia (si es una sesión nueva)
+if not st.session_state.messages:
+    st.info(lang_dict.get('assistant_welcome', "¡Hola! ¿En qué puedo ayudarte hoy?"))
     rails_dict = load_rails(username)
     if rails_dict:
         st.write("O intenta con alguna de estas preguntas:")
-        # Crear columnas para los botones.
-        num_rails = len(rails_dict)
-        cols = st.columns(num_rails if num_rails <= 4 else 4) # Máximo 4 columnas
-        
-        # Crear un botón en cada columna
-        for i, (key, value) in enumerate(rails_dict.items()):
-            if i >= 4: break # Limitar a 4 botones de ejemplo
+        cols = st.columns(len(rails_dict) if len(rails_dict) <= 4 else 4)
+        for i, (key, value) in enumerate(list(rails_dict.items())[:4]):
             if cols[i].button(value, key=f"rail_{key}"):
                 st.session_state.question_from_button = value
-                st.rerun() 
+                st.rerun()
 
-# --- FIN DE MODIFICACIONES DE UI ---
-
-# Mostrar mensajes del historial (si los hay)
+# Mostrar todo el historial de chat en cada ejecución
 for message in st.session_state.messages:
-    # Cambiamos el icono del asistente aquí
-    avatar_icon = "🤖" if message.type == "ai" else None
-    st.chat_message(message.type, avatar=avatar_icon).markdown(message.content)
+    avatar_icon = "🤖" if message.type == "ai" else "🧑‍💻"
+    with st.chat_message(message.type, avatar=avatar_icon):
+        st.markdown(message.content)
+        # Si la respuesta es de la IA y tiene fuentes, las mostramos
+        if message.type == "ai" and message.additional_kwargs.get("sources"):
+            with st.expander("Ver fuentes utilizadas"):
+                for i, doc in enumerate(message.additional_kwargs["sources"]):
+                    source = doc.metadata.get('source', 'N/A')
+                    content_preview = doc.page_content[:250] + "..." if len(doc.page_content) > 250 else doc.page_content
+                    st.info(f"**Fuente {i+1}:** `{source}`")
+                    st.write(content_preview)
 
-# Lógica para procesar la pregunta, ya sea del chat_input o de un botón
-question = None
-if st.session_state.get("question_from_button"):
-    question = st.session_state.pop("question_from_button") # Usar y limpiar
 
-# Input del usuario para la pregunta (se evalúa después del botón)
-if user_query := st.chat_input(lang_dict.get('assistant_question', "Pregunta lo que quieras")):
-    question = user_query
+# 4. Lógica para recibir y procesar una nueva pregunta
+# Se captura la pregunta, ya sea de un botón o del campo de texto
+question = st.session_state.pop("question_from_button", None)
+if not question:
+    question = st.chat_input(lang_dict.get('assistant_question', "Pregunta lo que quieras..."))
 
-# Si tenemos una pregunta que procesar...
+# Si hay una pregunta, se procesa
 if question:
+    # Añadir el mensaje del usuario al historial y mostrarlo
     st.session_state.messages.append(HumanMessage(content=question))
-    with st.chat_message('human'):
+    with st.chat_message('human', avatar="🧑‍💻"):
         st.markdown(question)
 
+    # Preparar y ejecutar la cadena RAG para obtener la respuesta de la IA
     with st.chat_message('assistant', avatar="🤖"):
         response_placeholder = st.empty()
         
         if not model or (not disable_vector_store and not vectorstore):
-            response_placeholder.markdown("Sorry, the assistant is not fully configured. Please contact the administrator.")
+            response_placeholder.markdown("Lo siento, el asistente no está completamente configurado.")
         else:
+            # Recuperar documentos relevantes
             relevant_documents = []
             if not disable_vector_store:
-                retriever = load_retriever(vectorstore, top_k_vectorstore)
-                if retriever:
-                    if strategy == 'Basic Retrieval':
-                        relevant_documents = retriever.get_relevant_documents(query=question)
-                    elif strategy == 'Maximal Marginal Relevance':
-                        relevant_documents = vectorstore.max_marginal_relevance_search(query=question, k=top_k_vectorstore)
-                    elif strategy == 'Fusion':
-                        generate_queries_chain_instance = generate_queries(model, language)
-                        if generate_queries_chain_instance:
-                            fusion_queries = generate_queries_chain_instance.invoke({"original_query": question})
-                            # (Lógica de Fusion RAG completa)
-                            retrieved_docs_lists = retriever.map().invoke(fusion_queries)
-                            fused_results = reciprocal_rank_fusion(retrieved_docs_lists)
-                            relevant_documents = [doc_tuple[0] for doc_tuple in fused_results][:top_k_vectorstore]
+                if strategy == 'Maximal Marginal Relevance':
+                    relevant_documents = vectorstore.max_marginal_relevance_search(query=question, k=top_k_vectorstore)
+                else: # Basic Retrieval por defecto
+                    retriever = vectorstore.as_retriever(search_kwargs={"k": top_k_vectorstore})
+                    relevant_documents = retriever.get_relevant_documents(query=question)
             
-            history = memory.load_memory_variables({}) if memory else {"chat_history": []}
+            # Cargar historial de memoria
+            memory = load_memory_rc(chat_history, top_k_history if not disable_chat_history else 0)
+            history = memory.load_memory_variables({}).get('chat_history', [])
             
-            rag_chain_inputs = RunnableMap({
-                'context': lambda x: x['context'],
-                'chat_history': lambda x: x['chat_history'],
-                'question': lambda x: x['question']
-            })
+            # Construir y ejecutar la cadena LangChain
+            rag_chain_inputs = {'context': lambda x: x['context'], 'chat_history': lambda x: x['chat_history'], 'question': lambda x: x['question']}
             current_prompt_obj = get_prompt(prompt_type, custom_prompt, language)
-            chain = rag_chain_inputs | current_prompt_obj | model
+            chain = RunnableMap(rag_chain_inputs) | current_prompt_obj | model
 
             try:
+                # Invocar la cadena y mostrar la respuesta en streaming
                 response = chain.invoke(
-                    {'question': question, 'chat_history': history.get('chat_history', []), 'context': relevant_documents}, 
+                    {'question': question, 'chat_history': history, 'context': relevant_documents},
                     config={'callbacks': [StreamHandler(response_placeholder)]}
                 )
                 final_content = response.content
-                if memory: memory.save_context({'question': question}, {'answer': final_content})
                 
-                response_placeholder.markdown(final_content) # Escribir la respuesta final sin las fuentes
-                st.session_state.messages.append(AIMessage(content=final_content))
+                # Guardar el contexto en la memoria para futuras preguntas
+                if memory: 
+                    memory.save_context({'question': question}, {'answer': final_content})
+                
+                # Añadir el mensaje final de la IA al historial (con fuentes) y refrescar la app
+                ai_message_with_sources = AIMessage(content=final_content, additional_kwargs={"sources": relevant_documents})
+                st.session_state.messages.append(ai_message_with_sources)
+                st.rerun()
+
             except Exception as e:
-                st.error(f"Error during response generation: {e}")
+                st.error(f"Error durante la generación de la respuesta: {e}")
+
+# --- FIN DEL CÓDIGO ---
