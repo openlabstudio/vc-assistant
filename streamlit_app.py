@@ -361,13 +361,13 @@ st.markdown("""
     <style>
         /* Contenedor principal para los mensajes y el encabezado */
         section[data-testid="st.main"] .block-container {
-            max-width: 55%; /* <-- CAMBIADO DE 65% a 55% */
-            margin: 0 auto;
+            max-width: 55% !important; /* <-- AÑADIDO !important PARA FORZAR LA REGLA */
+            margin: 0 auto !important;
         }
         /* Contenedor del campo de texto del chat */
         [data-testid="stChatInputContainer"] {
-            max-width: 55%; /* <-- CAMBIADO DE 65% a 55% */
-            margin: 0 auto;
+            max-width: 55% !important; /* <-- AÑADIDO !important PARA FORZAR LA REGLA */
+            margin: 0 auto !important;
         }
     </style>
 """, unsafe_allow_html=True)
