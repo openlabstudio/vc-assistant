@@ -361,12 +361,12 @@ st.markdown("""
     <style>
         /* Contenedor principal para los mensajes y el encabezado */
         section[data-testid="st.main"] .block-container {
-            max-width: 65%;
+            max-width: 55%; /* <-- CAMBIADO DE 65% a 55% */
             margin: 0 auto;
         }
         /* Contenedor del campo de texto del chat */
         [data-testid="stChatInputContainer"] {
-            max-width: 65%;
+            max-width: 55%; /* <-- CAMBIADO DE 65% a 55% */
             margin: 0 auto;
         }
     </style>
