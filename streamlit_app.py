@@ -432,11 +432,13 @@ for message in st.session_state.messages:
 # Se captura la pregunta, ya sea de un botón o del campo de texto
 question = st.session_state.pop("question_from_button", None)
 if not question:
-    question = st.chat_input(lang_dict.get('assistant_question', "Pregunta lo que quieras..."))
+    # Usamos el operador walrus (:=) para asignar y comprobar en la misma línea
+    if user_query := st.chat_input(lang_dict.get('assistant_question', "Pregunta lo que quieras...")):
+        question = user_query
 
-# Si hay una pregunta, se procesa
+# Si tenemos una pregunta válida, la procesamos
 if question:
-    # Añadir el mensaje del usuario al historial y mostrarlo
+    # Añadir el mensaje del usuario al historial y mostrarlo en la UI
     st.session_state.messages.append(HumanMessage(content=question))
     with st.chat_message('human', avatar="🧑‍💻"):
         st.markdown(question)
@@ -445,10 +447,13 @@ if question:
     with st.chat_message('assistant', avatar="🤖"):
         response_placeholder = st.empty()
         
+        # Comprobación de que los componentes de la IA están listos
         if not model or (not disable_vector_store and not vectorstore):
             response_placeholder.markdown("Lo siento, el asistente no está completamente configurado.")
         else:
-            # Recuperar documentos relevantes
+            # Este bloque 'else' asegura que todo lo de abajo solo se ejecuta si la IA está lista
+            
+            # Paso 1: Recuperar documentos relevantes de Astra DB
             relevant_documents = []
             if not disable_vector_store:
                 if strategy == 'Maximal Marginal Relevance':
@@ -457,33 +462,33 @@ if question:
                     retriever = vectorstore.as_retriever(search_kwargs={"k": top_k_vectorstore})
                     relevant_documents = retriever.get_relevant_documents(query=question)
             
-            # Cargar historial de memoria
+            # Paso 2: Cargar el historial de memoria del chat
             memory = load_memory_rc(chat_history, top_k_history if not disable_chat_history else 0)
             history = memory.load_memory_variables({}).get('chat_history', [])
             
-            # Construir y ejecutar la cadena LangChain
+            # Paso 3: Construir la cadena LangChain. 'chain' se define aquí.
             rag_chain_inputs = {'context': lambda x: x['context'], 'chat_history': lambda x: x['chat_history'], 'question': lambda x: x['question']}
             current_prompt_obj = get_prompt(prompt_type, custom_prompt, language)
             chain = RunnableMap(rag_chain_inputs) | current_prompt_obj | model
 
-try:
-    # Invocar la cadena y mostrar la respuesta en streaming
-    response = chain.invoke(
-        {'question': question, 'chat_history': history, 'context': relevant_documents},
-        config={'callbacks': [StreamHandler(response_placeholder)]}
-    )
-    final_content = response.content
+            # Paso 4: Ejecutar la cadena y mostrar la respuesta
+            try:
+                # 'chain' se usa aquí, dentro del mismo bloque donde se definió.
+                response = chain.invoke(
+                    {'question': question, 'chat_history': history, 'context': relevant_documents},
+                    config={'callbacks': [StreamHandler(response_placeholder)]}
+                )
+                final_content = response.content
+                
+                # Guardar el contexto en la memoria para futuras preguntas
+                if memory: 
+                    memory.save_context({'question': question}, {'answer': final_content})
+                
+                # Añadir el mensaje final de la IA al historial y refrescar la app
+                st.session_state.messages.append(AIMessage(content=final_content))
+                st.rerun()
 
-    # Guardar el contexto en la memoria para futuras preguntas
-    if memory: 
-        memory.save_context({'question': question}, {'answer': final_content})
+            except Exception as e:
+                st.error(f"Error durante la generación de la respuesta: {e}")
 
-    # Añadir el mensaje final de la IA al historial (YA SIN FUENTES) y refrescar
-    st.session_state.messages.append(AIMessage(content=final_content))
-    # Mantenemos st.rerun() para que la respuesta aparezca al instante.
-    st.rerun()
-
-except Exception as e:
-    st.error(f"Error durante la generación de la respuesta: {e}")
-
-# --- FIN DEL CÓDIGO ---
+# --- FIN DEL ARCHIVO ---
