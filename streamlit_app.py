@@ -419,13 +419,13 @@ for message in st.session_state.messages:
     with st.chat_message(message.type, avatar=avatar_icon):
         st.markdown(message.content)
         # Si la respuesta es de la IA y tiene fuentes, las mostramos
-        if message.type == "ai" and message.additional_kwargs.get("sources"):
-            with st.expander("Ver fuentes utilizadas"):
-                for i, doc in enumerate(message.additional_kwargs["sources"]):
-                    source = doc.metadata.get('source', 'N/A')
-                    content_preview = doc.page_content[:250] + "..." if len(doc.page_content) > 250 else doc.page_content
-                    st.info(f"**Fuente {i+1}:** `{source}`")
-                    st.write(content_preview)
+        # if message.type == "ai" and message.additional_kwargs.get("sources"):
+        #    with st.expander("Ver fuentes utilizadas"):
+        #        for i, doc in enumerate(message.additional_kwargs["sources"]):
+        #            source = doc.metadata.get('source', 'N/A')
+        #            content_preview = doc.page_content[:250] + "..." if len(doc.page_content) > 250 else doc.page_content
+        #            st.info(f"**Fuente {i+1}:** `{source}`")
+        #            st.write(content_preview)
 
 
 # 4. Lógica para recibir y procesar una nueva pregunta
@@ -466,24 +466,24 @@ if question:
             current_prompt_obj = get_prompt(prompt_type, custom_prompt, language)
             chain = RunnableMap(rag_chain_inputs) | current_prompt_obj | model
 
-            try:
-                # Invocar la cadena y mostrar la respuesta en streaming
-                response = chain.invoke(
-                    {'question': question, 'chat_history': history, 'context': relevant_documents},
-                    config={'callbacks': [StreamHandler(response_placeholder)]}
-                )
-                final_content = response.content
-                
-                # Guardar el contexto en la memoria para futuras preguntas
-                if memory: 
-                    memory.save_context({'question': question}, {'answer': final_content})
-                
-                # Añadir el mensaje final de la IA al historial (con fuentes) y refrescar la app
-                ai_message_with_sources = AIMessage(content=final_content, additional_kwargs={"sources": relevant_documents})
-                st.session_state.messages.append(ai_message_with_sources)
-                st.rerun()
+try:
+    # Invocar la cadena y mostrar la respuesta en streaming
+    response = chain.invoke(
+        {'question': question, 'chat_history': history, 'context': relevant_documents},
+        config={'callbacks': [StreamHandler(response_placeholder)]}
+    )
+    final_content = response.content
 
-            except Exception as e:
-                st.error(f"Error durante la generación de la respuesta: {e}")
+    # Guardar el contexto en la memoria para futuras preguntas
+    if memory: 
+        memory.save_context({'question': question}, {'answer': final_content})
+
+    # Añadir el mensaje final de la IA al historial (YA SIN FUENTES) y refrescar
+    st.session_state.messages.append(AIMessage(content=final_content))
+    # Mantenemos st.rerun() para que la respuesta aparezca al instante.
+    st.rerun()
+
+except Exception as e:
+    st.error(f"Error durante la generación de la respuesta: {e}")
 
 # --- FIN DEL CÓDIGO ---
