@@ -150,6 +150,34 @@ def vectorize_url(urls, vectorstore, lang_dict):
             except Exception as e:
                 st.error(f"Error loading from URL {url}: {e}")
 
+def generate_follow_up_question(question, answer, model):
+    """
+    Hace una segunda llamada a la IA para generar una pregunta de seguimiento.
+    """
+    prompt_template = """Basado en la pregunta original del usuario y la respuesta que ha dado la IA, genera una única y concisa pregunta de seguimiento para invitar al usuario a profundizar.
+Devuelve únicamente el texto de la pregunta, sin saludos, prefijos ni nada más.
+
+Pregunta del Usuario: "{user_question}"
+
+Respuesta de la IA: "{ai_answer}"
+
+Pregunta de Seguimiento Sugerida:"""
+    
+    prompt = ChatPromptTemplate.from_template(prompt_template)
+    
+    # Creamos una cadena simple solo para esta tarea
+    chain = prompt | model | StrOutputParser()
+    
+    try:
+        # Usamos .invoke() porque no necesitamos streaming para esta llamada corta
+        suggested_question = chain.invoke({
+            "user_question": question,
+            "ai_answer": answer,
+        })
+        return suggested_question
+    except Exception:
+        return None # Si algo falla, simplemente no devolvemos nada
+
 def get_prompt(type, custom_prompt, language):
     base_template = f"""Use the following context to answer the question:
 {{context}}
@@ -427,6 +455,15 @@ for message in st.session_state.messages:
         #            st.info(f"**Fuente {i+1}:** `{source}`")
         #            st.write(content_preview)
 
+# 5. Lógica para mostrar la pregunta sugerida como un botón
+if "suggested_question" in st.session_state and st.session_state.suggested_question:
+    # Usamos st.button para crear el botón. Si se pulsa, se ejecuta el bloque.
+    if st.button(f"Sugerencia: *{st.session_state.suggested_question}*"):
+        # Preparamos la pregunta para que el siguiente ciclo la procese
+        st.session_state.question_from_button = st.session_state.suggested_question
+        # Limpiamos la sugerencia para que no vuelva a aparecer
+        del st.session_state.suggested_question 
+        st.rerun()
 
 # 4. Lógica para recibir y procesar una nueva pregunta
 # Se captura la pregunta, ya sea de un botón o del campo de texto
@@ -472,23 +509,29 @@ if question:
             chain = RunnableMap(rag_chain_inputs) | current_prompt_obj | model
 
             # Paso 4: Ejecutar la cadena y mostrar la respuesta
-            try:
-                # 'chain' se usa aquí, dentro del mismo bloque donde se definió.
-                response = chain.invoke(
-                    {'question': question, 'chat_history': history, 'context': relevant_documents},
-                    config={'callbacks': [StreamHandler(response_placeholder)]}
-                )
-                final_content = response.content
-                
-                # Guardar el contexto en la memoria para futuras preguntas
-                if memory: 
-                    memory.save_context({'question': question}, {'answer': final_content})
-                
-                # Añadir el mensaje final de la IA al historial y refrescar la app
-                st.session_state.messages.append(AIMessage(content=final_content))
-                st.rerun()
+# Bloque nuevo con la llamada a la función de seguimiento
+try:
+    # Paso 1: Obtener y mostrar la respuesta principal en streaming
+    response = chain.invoke(
+        {'question': question, 'chat_history': history, 'context': relevant_documents},
+        config={'callbacks': [StreamHandler(response_placeholder)]}
+    )
+    final_content = response.content
 
-            except Exception as e:
-                st.error(f"Error durante la generación de la respuesta: {e}")
+    if memory: 
+        memory.save_context({'question': question}, {'answer': final_content})
+
+    st.session_state.messages.append(AIMessage(content=final_content))
+
+    # Paso 2: Generar la pregunta de seguimiento y guardarla en la sesión
+    with st.spinner("Generando sugerencia..."):
+        suggested_question = generate_follow_up_question(question, final_content, model)
+        if suggested_question:
+            st.session_state.suggested_question = suggested_question
+
+    st.rerun()
+
+except Exception as e:
+    st.error(f"Error durante la generación de la respuesta: {e}")
 
 # --- FIN DEL ARCHIVO ---
