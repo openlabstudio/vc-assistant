@@ -428,90 +428,92 @@ st.markdown(f"""
 st.divider()
 
 # 3. Lógica de visualización del chat
+# Mensajes de bienvenida y botones de sugerencia (si es una sesión nueva)
+if not st.session_state.messages:
+    # Mostramos el nuevo texto de bienvenida que querías
+    st.info("Escribe tu pregunta en el cuadro de abajo o selecciona alguna de las siguientes sugerencias de preguntas")
+    
+    # --- AÑADIMOS LAS PREGUNTAS FIJAS (CON EL TEXTO ACTUALIZADO) ---
+    PREGUNTAS_SUGERIDAS = [
+        "¿Qué pasos iniciales debo dar para introducir IA en mi fondo?",
+        "Háblame de casos de éxito de fondos que ya usan la IA",
+        "¿Cómo está la IA transformando el deal sourcing en VC y PE?"
+    ]
+    
+    # Creamos 3 columnas para los 3 botones
+    cols = st.columns(len(PREGUNTAS_SUGERIDAS))
+    
+    # Creamos un botón en cada columna
+    for i, pregunta in enumerate(PREGUNTAS_SUGERIDAS):
+        if cols[i].button(pregunta, key=f"rail_fijo_{i}"):
+            st.session_state.question_from_button = pregunta
+            st.rerun()
+    
 # Mostrar todo el historial de chat en cada ejecución
 for message in st.session_state.messages:
     avatar_icon = "🤖" if message.type == "ai" else "🧑‍💻"
     with st.chat_message(message.type, avatar=avatar_icon):
         st.markdown(message.content)
 
-# Lógica para mostrar la pregunta sugerida como un botón
+# Lógica para mostrar la pregunta sugerida dinámica (después de una respuesta)
 if "suggested_question" in st.session_state and st.session_state.suggested_question:
-    # Usamos st.button para crear el botón. Si se pulsa, se ejecuta el bloque.
     if st.button(f"Sugerencia: *{st.session_state.suggested_question}*"):
-        # Preparamos la pregunta para que el siguiente ciclo la procese
         st.session_state.question_from_button = st.session_state.suggested_question
-        # Limpiamos la sugerencia para que no vuelva a aparecer
         del st.session_state.suggested_question 
         st.rerun()
 
 
 # 4. Lógica para recibir una nueva pregunta del usuario
-# Se captura la pregunta, ya sea de un botón o del campo de texto
 question = st.session_state.pop("question_from_button", None)
 if not question:
-    # Usamos el operador walrus (:=) para asignar y comprobar en la misma línea
     if user_query := st.chat_input(lang_dict.get('assistant_question', "Pregunta lo que quieras...")):
         question = user_query
 
 
 # 5. Lógica para procesar la pregunta, si existe una
 if question:
-    # Añadir el mensaje del usuario al historial y mostrarlo en la UI
     st.session_state.messages.append(HumanMessage(content=question))
     with st.chat_message('human', avatar="🧑‍💻"):
         st.markdown(question)
 
-    # Preparar y ejecutar la cadena RAG para obtener la respuesta de la IA
     with st.chat_message('assistant', avatar="🤖"):
         response_placeholder = st.empty()
         
-        # Comprobación de que los componentes de la IA están listos
         if not model or (not disable_vector_store and not vectorstore):
             response_placeholder.markdown("Lo siento, el asistente no está completamente configurado.")
         else:
-            # Este bloque 'else' asegura que todo lo de abajo solo se ejecuta si la IA está lista
-            
-            # Paso A: Recuperar documentos relevantes de Astra DB
             relevant_documents = []
             if not disable_vector_store:
                 if strategy == 'Maximal Marginal Relevance':
                     relevant_documents = vectorstore.max_marginal_relevance_search(query=question, k=top_k_vectorstore)
-                else: # Basic Retrieval por defecto
+                else: 
                     retriever = vectorstore.as_retriever(search_kwargs={"k": top_k_vectorstore})
                     relevant_documents = retriever.get_relevant_documents(query=question)
             
-            # Paso B: Cargar el historial de memoria del chat
             memory = load_memory_rc(chat_history, top_k_history if not disable_chat_history else 0)
             history = memory.load_memory_variables({}).get('chat_history', [])
             
-            # Paso C: Construir la cadena LangChain. 'chain' se define aquí.
             rag_chain_inputs = {'context': lambda x: x['context'], 'chat_history': lambda x: x['chat_history'], 'question': lambda x: x['question']}
             current_prompt_obj = get_prompt(prompt_type, custom_prompt, language)
             chain = RunnableMap(rag_chain_inputs) | current_prompt_obj | model
 
-            # Paso D: Ejecutar la cadena y la lógica de seguimiento
             try:
-                # Se usa 'chain' para obtener la respuesta principal
                 response = chain.invoke(
                     {'question': question, 'chat_history': history, 'context': relevant_documents},
                     config={'callbacks': [StreamHandler(response_placeholder)]}
                 )
                 final_content = response.content
                 
-                # Se guarda el contexto en la memoria
                 if memory: 
                     memory.save_context({'question': question}, {'answer': final_content})
                 
-                # Se añade el mensaje de la IA al historial
                 st.session_state.messages.append(AIMessage(content=final_content))
                 
-                # Se genera la pregunta de seguimiento
                 with st.spinner("Generando sugerencia..."):
                     suggested_question = generate_follow_up_question(question, final_content, model)
                     if suggested_question:
                         st.session_state.suggested_question = suggested_question
                 
-                # Se refresca la app para mostrar la sugerencia
                 st.rerun()
 
             except Exception as e:
