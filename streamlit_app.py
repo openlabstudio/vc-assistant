@@ -521,4 +521,3 @@ if question:
             except Exception as e:
                 st.error(f"Error durante la generación de la respuesta: {e}")
 
-# --- FIN DEL ARCHIVO ---
