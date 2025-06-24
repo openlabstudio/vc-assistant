@@ -29,7 +29,7 @@ st.set_page_config(page_title=" ", page_icon='./customizations/logo/anim-logo-1f
 
 # --- INICIALIZACIÓN DE SESSION STATE (ÚNICA Y CORRECTA) ---
 if "messages" not in st.session_state:
-    st.session_state.messages = [] # CORREGIDO: antes era st.session_session_state.messages
+    st.session_state.messages = []
 if "session_id" not in st.session_state:
     st.session_state.session_id = str(uuid.uuid4())
 
