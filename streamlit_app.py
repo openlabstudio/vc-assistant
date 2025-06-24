@@ -427,6 +427,8 @@ st.markdown(f"""
 
 st.divider()
 
+# --- COPIA Y PEGA ESTE BLOQUE COMPLETO HASTA EL FINAL ---
+
 # 3. Lógica de visualización del chat
 # Mensajes de bienvenida y botones de sugerencia (si es una sesión nueva)
 if not st.session_state.messages:
