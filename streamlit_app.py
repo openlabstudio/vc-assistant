@@ -85,6 +85,15 @@ def logout():
     st.cache_data.clear()
     st.rerun()
 
+# --- Función para codificar la imagen a base64 (Movida aquí para definirse una sola vez) ---
+def get_image_as_base64(path):
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+        return base64.b64encode(data).decode()
+    except Exception:
+        return ""
+
 def vectorize_text(uploaded_files, vectorstore, lang_dict):
     if not vectorstore:
         st.error(lang_dict.get('vectorstore_not_ready_admin', "Vectorstore not ready for upload."))
@@ -237,7 +246,7 @@ def list_document_sources(vectorstore):
     try:
         # Hacemos una búsqueda de similitud con un término genérico para obtener documentos.
         # Pedimos un número alto (k=1000) para intentar obtener una muestra representativa.
-        results = vectorstore.similarity_search("*", k=1000)
+        results = vectorstore.similarity_similarity_search("*", k=1000)
         
         # Usamos un set para guardar solo los nombres de archivo únicos
         sources = set()
@@ -425,47 +434,42 @@ memory = load_memory_rc(chat_history, top_k_history if not disable_chat_history 
 # --- Interfaz Principal del Chat (Visible para TODOS los usuarios) ---
 
 # 1. Inyectamos el CSS final para centrar el layout y el logo
-st.markdown("""
-    <style>
-        /* Contenedor principal de toda la aplicación Streamlit */
-        div[data-testid="stAppViewContainer"] {
-            max-width: 55% !important; 
-            margin: 0 auto !important;
-        }
-        /* Contenedor del campo de texto del chat */
-        [data-testid="stChatInputContainer"] {
-            max-width: 55% !important; 
-            margin: 0 auto !important;
-        }
-    </style>
-""", unsafe_allow_html=True)
+# Protegemos este bloque para que solo se dibuje una vez por sesión
+if not st.session_state.header_drawn:
+    st.markdown("""
+        <style>
+            /* Contenedor principal de toda la aplicación Streamlit */
+            div[data-testid="stAppViewContainer"] {
+                max-width: 55% !important; 
+                margin: 0 auto !important;
+            }
+            /* Contenedor del campo de texto del chat */
+            [data-testid="stChatInputContainer"] {
+                max-width: 55% !important; 
+                margin: 0 auto !important;
+            }
+        </style>
+    """, unsafe_allow_html=True)
 
 
-# 2. Definimos y mostramos el encabezado de forma robusta
-# Función para codificar la imagen a base64 (así la podemos meter en el HTML)
-import base64
-def get_image_as_base64(path):
-    try:
-        with open(path, "rb") as f:
-            data = f.read()
-        return base64.b64encode(data).decode()
-    except Exception:
-        return ""
+    # 2. Definimos y mostramos el encabezado de forma robusta
+    # La función get_image_as_base64 ha sido movida a la sección de CLASES Y FUNCIONES arriba.
+    
+    # Obtenemos la imagen del logo en base64
+    logo_base64 = get_image_as_base64("./customizations/logo/anim-logo-1fps-verde.gif")
 
-# Obtenemos la imagen del logo en base64
-logo_base64 = get_image_as_base64("./customizations/logo/anim-logo-1fps-verde.gif")
+    # Un solo bloque de HTML para todo el encabezado, asegurando el centrado
+    st.markdown(f"""
+        <div style="text-align: center;">
+            <img src="data:image/gif;base64,{logo_base64}" alt="Logo" width="150">
+            <h1>Agente Experto IA para Fondos</h1>
+            <p>Por OPENLAB VENTURES, S.L. ®</p>
+            <p style="color: #9c9d9f; font-size: 0.9rem;">Tu consultor virtual especializado en la introducción estratégica de la Inteligencia Artificial en los procesos internos de Venture Capital y Private Equity.</p>
+        </div>
+    """, unsafe_allow_html=True)
 
-# Un solo bloque de HTML para todo el encabezado, asegurando el centrado
-st.markdown(f"""
-    <div style="text-align: center;">
-        <img src="data:image/gif;base64,{logo_base64}" alt="Logo" width="150">
-        <h1>Agente Experto IA para Fondos</h1>
-        <p>Por OPENLAB VENTURES, S.L. ®</p>
-        <p style="color: #9c9d9f; font-size: 0.9rem;">Tu consultor virtual especializado en la introducción estratégica de la Inteligencia Artificial en los procesos internos de Venture Capital y Private Equity.</p>
-    </div>
-""", unsafe_allow_html=True)
-
-st.divider()
+    st.divider()
+    st.session_state.header_drawn = True # Marcamos que el encabezado ya se dibujó
 
 
 # 3. Lógica de visualización del chat
