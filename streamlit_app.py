@@ -120,7 +120,7 @@ def vectorize_text(uploaded_files, vectorstore, lang_dict):
                         doc.metadata["source"] = uploaded_file.name
                         
                     if docs:
-                        text_splitter = RecursiveCharacterTextTextSplitter(chunk_size=1000, chunk_overlap=150)
+                        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
                         pages = text_splitter.split_documents(docs)
                         vectorstore.add_documents(pages)
                         st.info(f"✅ {uploaded_file.name} processed ({len(pages)} segments).")
@@ -176,7 +176,7 @@ Pregunta de Seguimiento Sugerida:"""
     except Exception:
         return None # Si algo falla, simplemente no devolvemos nada
 
-def get_prompt(type, custom_prompt, language):
+def get_prompt(type_param, custom_prompt, language): # Cambiado 'type' a 'type_param'
     base_template = f"""Use the following context to answer the question:
 {{context}}
 
@@ -188,12 +188,12 @@ Question:
 
 Answer in {language}:"""
     
-    if type == 'Extended results':
+    if type_param == 'Extended results': # Usamos 'type_param' aquí
         template = f"""You're a helpful AI assistant tasked to answer the user's questions.
 You're friendly and you answer extensively with multiple sentences. You prefer to use bulletpoints to summarize.
 If you don't know the answer, just say 'I do not know the answer'.
 {base_template}"""
-    elif type == 'Short results':
+    elif type_param == 'Short results': # Usamos 'type_param' aquí
         template = f"""You're a helpful AI assistant tasked to answer the user's questions.
 You answer in an exceptionally brief way.
 If you don't know the answer, just say 'I do not know the answer'.
@@ -237,7 +237,7 @@ def list_document_sources(vectorstore):
     try:
         # Hacemos una búsqueda de similitud con un término genérico para obtener documentos.
         # Pedimos un número alto (k=1000) para intentar obtener una muestra representativa.
-        results = vectorstore.similarity_similarity_search("*", k=1000)
+        results = vectorstore.similarity_search("*", k=1000)
         
         # Usamos un set para guardar solo los nombres de archivo únicos
         sources = set()
@@ -427,14 +427,14 @@ memory = load_memory_rc(chat_history, top_k_history if not disable_chat_history 
 # 1. Inyectamos el CSS final para centrar el layout y el logo
 st.markdown("""
     <style>
-        /* Contenedor principal para los mensajes y el encabezado */
-        section[data-testid="st.main"] .block-container {
-            max-width: 55% !important; /* <-- AÑADIDO !important PARA FORZAR LA REGLA */
+        /* Contenedor principal de toda la aplicación Streamlit */
+        div[data-testid="stAppViewContainer"] {
+            max-width: 55% !important; 
             margin: 0 auto !important;
         }
         /* Contenedor del campo de texto del chat */
         [data-testid="stChatInputContainer"] {
-            max-width: 55% !important; /* <-- AÑADIDO !important PARA FORZAR LA REGLA */
+            max-width: 55% !important; 
             margin: 0 auto !important;
         }
     </style>
@@ -493,7 +493,7 @@ if not st.session_state.messages:
 # Mostrar todo el historial de chat en cada ejecución
 for message in st.session_state.messages:
     avatar_icon = "🤖" if message.type == "ai" else "🧑‍💻"
-    with st.chat_message(type, avatar=avatar_icon): # ERROR: type NO DEFINIDO
+    with st.chat_message(message.type, avatar=avatar_icon): # Corregido: type a message.type
         st.markdown(message.content)
 
 # Lógica para mostrar la pregunta sugerida dinámica (después de una respuesta)
@@ -535,7 +535,7 @@ if question:
             history = memory.load_memory_variables({}).get('chat_history', [])
             
             rag_chain_inputs = {'context': lambda x: x['context'], 'chat_history': lambda x: x['chat_history'], 'question': lambda x: x['question']}
-            current_prompt_obj = get_prompt(type, custom_prompt, language)
+            current_prompt_obj = get_prompt(prompt_type, custom_prompt, language) # Corregido: type a prompt_type
             chain = RunnableMap(rag_chain_inputs) | current_prompt_obj | model
 
             try:
