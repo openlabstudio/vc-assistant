@@ -24,31 +24,25 @@ from langchain.callbacks.base import BaseCallbackHandler
 
 import openai
 
+# --- CONFIGURACIÓN DE PÁGINA (DEBE SER LO PRIMERO) ---
 st.set_page_config(page_title=" ", page_icon='./customizations/logo/anim-logo-1fps-verde.gif', layout="wide")
 
-# ▼▼▼ ESTE ES EL BLOQUE QUE NECESITAS AÑADIR ▼▼▼
-# --- INICIALIZACIÓN DE SESSION STATE ---
+# --- INICIALIZACIÓN DE SESSION STATE (ÚNICA Y CORRECTA) ---
 # Esto asegura que las variables de sesión existan desde el principio.
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "session_id" not in st.session_state:
     st.session_state.session_id = str(uuid.uuid4())
-# ▲▲▲ FIN DEL BLOQUE A AÑADIR ▲▲▲
+# La variable debug_messages ya no se usa, la eliminamos para limpiar
+# if "debug_messages" not in st.session_state:
+#     st.session_state.debug_messages = []
 
 
 # --- CONFIGURACIÓN GLOBAL ---
 ASTRA_DB_COLLECTION_NAME = "vc_assistant"
-ADMIN_USERS = ["openlab_admin"] 
+ADMIN_USERS = ["openlab_admin"]
 
-print("Streamlit App Started")
-
-
-# --- INICIALIZACIÓN DE SESSION STATE ---
-if "session_id" not in st.session_state:
-    st.session_state.session_id = str(uuid.uuid4())
-if "debug_messages" not in st.session_state:
-    st.session_state.debug_messages = []
-
+print("Streamlit App Started") # Esto se muestra en los logs de Streamlit Cloud
 
 # --- CLASES Y FUNCIONES ---
 class StreamHandler(BaseCallbackHandler):
@@ -67,15 +61,20 @@ def check_password():
             st.form_submit_button('Login', on_click=password_entered)
 
     def password_entered():
-        if 'passwords' in st.secrets and st.session_state.get('username') in st.secrets['passwords'] and hmac.compare_digest(st.session_state.get('password', ''), st.secrets.passwords[st.session_state.get('username', '')]):
-            st.session_state['password_correct'] = True
-            st.session_state.user = st.session_state['username']
-            if 'password' in st.session_state: del st.session_state['password']
-        else:
+        try:
+            user_creds = st.secrets.get('passwords', {})
+            if st.session_state.get('username') in user_creds and hmac.compare_digest(st.session_state.get('password', ''), user_creds[st.session_state.get('username')]):
+                st.session_state['password_correct'] = True
+                st.session_state.user = st.session_state['username']
+                if 'password' in st.session_state: del st.session_state['password']
+            else:
+                st.session_state['password_correct'] = False
+        except Exception:
             st.session_state['password_correct'] = False
 
     if st.session_state.get('password_correct', False):
         return True
+    
     login_form()
     if "password_correct" in st.session_state and not st.session_state['password_correct']:
         st.error('😕 Usuario desconocido o contraseña incorrecta')
@@ -92,63 +91,65 @@ def vectorize_text(uploaded_files, vectorstore, lang_dict):
     if not vectorstore:
         st.error(lang_dict.get('vectorstore_not_ready_admin', "Vectorstore not ready for upload."))
         return
-    with st.spinner("Processing files... This may take a moment."):
+    with st.spinner("Procesando archivos... Esto puede tardar un momento."):
         for uploaded_file in uploaded_files:
             if uploaded_file is not None:
-                with tempfile.NamedTemporaryFile(delete=False, suffix=Path(uploaded_file.name).suffix) as tmp_file:
-                    tmp_file.write(uploaded_file.getvalue())
-                    tmp_file_path = tmp_file.name
-                
-                st.session_state.debug_messages.append(f"Admin: Processing file {uploaded_file.name}")
                 try:
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=Path(uploaded_file.name).suffix) as tmp_file:
+                        tmp_file.write(uploaded_file.getvalue())
+                        tmp_file_path = tmp_file.name
+                    
+                    loader_map = {
+                        '.pdf': PyPDFLoader,
+                        '.csv': lambda p: CSVLoader(p, encoding='utf-8'),
+                        '.txt': None # Caso especial
+                    }
+                    ext = Path(uploaded_file.name).suffix
+                    
                     docs = []
-                    if uploaded_file.name.endswith('.pdf'):
-                        loader = PyPDFLoader(tmp_file_path)
+                    if ext in loader_map and loader_map[ext] is not None:
+                        loader = loader_map[ext](tmp_file_path)
                         docs = loader.load()
-                        for doc in docs:
-                            doc.metadata["source"] = uploaded_file.name
-                    elif uploaded_file.name.endswith('.csv'):
-                        loader = CSVLoader(tmp_file_path, encoding='utf-8')
-                        docs = loader.load()
-                        for doc in docs:
-                            doc.metadata["source"] = uploaded_file.name
-                    elif uploaded_file.name.endswith('.txt'):
+                    elif ext == '.txt':
                         from langchain.schema import Document
                         with open(tmp_file_path, 'r', encoding='utf-8') as f_txt:
-                            docs = [Document(page_content=f_txt.read(), metadata={"source": uploaded_file.name})]
+                            docs = [Document(page_content=f_txt.read())]
                     else:
-                        st.warning(f"Unsupported file type: {uploaded_file.name}")
+                        st.warning(f"Tipo de archivo no soportado: {uploaded_file.name}")
                         continue
                     
+                    for doc in docs:
+                        doc.metadata["source"] = uploaded_file.name
+                        
                     if docs:
                         text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
                         pages = text_splitter.split_documents(docs)
                         vectorstore.add_documents(pages)
-                        st.info(f"✅ {uploaded_file.name} processed ({len(pages)} segments).")
+                        st.info(f"✅ {uploaded_file.name} procesado ({len(pages)} segmentos).")
                 except Exception as e:
-                    st.error(f"Error processing file {uploaded_file.name}: {e}")
+                    st.error(f"Error procesando {uploaded_file.name}: {e}")
                 finally:
-                    if os.path.exists(tmp_file_path):
+                    if 'tmp_file_path' in locals() and os.path.exists(tmp_file_path):
                         os.remove(tmp_file_path)
 
 def vectorize_url(urls, vectorstore, lang_dict):
     if not vectorstore:
         st.error(lang_dict.get('vectorstore_not_ready_admin', "Vectorstore not ready for URL load."))
         return
-    with st.spinner("Processing URLs..."):
+    with st.spinner("Procesando URLs..."):
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
         for url in urls:
             url = url.strip()
             if not url: continue
             try:
-                st.session_state.debug_messages.append(f"Admin: Loading from URL: {url}")
+                # st.session_state.debug_messages.append(f"Admin: Loading from URL: {url}") # Ya no usamos debug_messages
                 loader = WebBaseLoader(url)
                 docs = loader.load()
                 pages = text_splitter.split_documents(docs)
                 vectorstore.add_documents(pages)
-                st.info(f"✅ URL processed: {url}")
+                st.info(f"✅ URL procesada: {url}")
             except Exception as e:
-                st.error(f"Error loading from URL {url}: {e}")
+                st.error(f"Error cargando desde URL {url}: {e}")
 
 def generate_follow_up_question(question, answer, model):
     """
@@ -227,6 +228,32 @@ def reciprocal_rank_fusion(results: list[list], k=60):
             except Exception: continue
     return [(loads(doc), score) for doc, score in sorted(fused_scores.items(), key=lambda x: x[1], reverse=True)]
 
+def list_document_sources(vectorstore):
+    """
+    Realiza una búsqueda genérica en el vectorstore para obtener los metadatos
+    de los documentos y devuelve una lista de las fuentes únicas.
+    """
+    if not vectorstore:
+        st.error("El Vector Store no está disponible.")
+        return []
+
+    try:
+        # Hacemos una búsqueda de similitud con un término genérico para obtener documentos.
+        # Pedimos un número alto (k=1000) para intentar obtener una muestra representativa.
+        results = vectorstore.similarity_search("*", k=1000)
+        
+        # Usamos un set para guardar solo los nombres de archivo únicos
+        sources = set()
+        for doc in results:
+            if "source" in doc.metadata:
+                sources.add(doc.metadata["source"])
+        
+        return sorted(list(sources))
+
+    except Exception as e:
+        st.error(f"No se pudieron obtener los documentos: {e}")
+        return []
+
 
 # --- Funciones de Carga de Recursos Cacheadas ---
 @st.cache_data()
@@ -246,12 +273,23 @@ def load_rails(username):
         return pd.Series(df_user.value.values, index=df_user.key).to_dict()
     except Exception: return {}
 
-@st.cache_resource(show_spinner="Loading embeddings...")
+@st.cache_data() # <--- MEJORA: Este es un dato, no un recurso. Cambiado a cache_data.
+def get_custom_prompt(username):
+    prompt_path = Path(f"./customizations/prompt/{username}.txt")
+    if not prompt_path.is_file():
+        prompt_path = Path("./customizations/prompt/default.txt")
+    
+    try:
+        return prompt_path.read_text(encoding='utf-8')
+    except Exception:
+        return "Responde a la pregunta basándote en el contexto y la conversación previa."
+
+@st.cache_resource(show_spinner="Conectando con la IA...")
 def load_embedding_rc():
     return OpenAIEmbeddings(openai_api_key=st.secrets.get("OPENAI_API_KEY"))
 
-@st.cache_resource(show_spinner="Loading vector store...")
-def load_vectorstore_rc(username, _embedding): # Underscore to prevent hashing
+@st.cache_resource(show_spinner="Cargando base de conocimiento...")
+def load_vectorstore_rc(_embedding):
     return AstraDB(
         embedding=_embedding,
         collection_name=ASTRA_DB_COLLECTION_NAME,
@@ -260,7 +298,7 @@ def load_vectorstore_rc(username, _embedding): # Underscore to prevent hashing
         namespace=st.secrets.get("ASTRA_KEYSPACE")
     )
 
-@st.cache_resource(show_spinner="Loading chat history...")
+@st.cache_resource(show_spinner="Cargando historial de chat...")
 def load_chat_history_rc(username, session_id):
     return AstraDBChatMessageHistory(
         session_id=f"{username}_{str(session_id)}",
@@ -269,7 +307,7 @@ def load_chat_history_rc(username, session_id):
         collection_name="historial_chat_asistente"
     )
 
-@st.cache_resource(show_spinner="Loading AI model...")
+@st.cache_resource(show_spinner="Cargando modelo de lenguaje...")
 def load_model_rc():
     return ChatOpenAI(temperature=0.3, model='gpt-4o', streaming=True, verbose=False)
 
@@ -292,7 +330,7 @@ language = st.secrets.get("languages", {}).get(username, "es_ES")
 lang_dict = load_localization(language)
 
 embedding = load_embedding_rc()
-vectorstore = load_vectorstore_rc(username, embedding) if embedding else None
+vectorstore = load_vectorstore_rc(embedding) if embedding else None
 chat_history = load_chat_history_rc(username, st.session_state.session_id) if vectorstore else None
 model = load_model_rc()
 
@@ -300,66 +338,77 @@ model = load_model_rc()
 if username != "demo":
     with st.sidebar:
         # Logo, Logout, Rails...
-        st.image('./customizations/logo/default.svg', use_column_width="always")
+        # La imagen del logo por defecto ya se renderiza por el CSS global, este es el logo antiguo
+        # st.image('./customizations/logo/default.svg', use_column_width="always") 
         st.markdown(f"""{lang_dict.get('logout_caption','Logged in as')} :orange[{username}]""")
         if st.button(lang_dict.get('logout_button','Logout')): logout()
         st.divider()
 
         rails_dict = load_rails(username)
+        # Este bloque de rails es para el sidebar, si no lo quieres, puedes borrarlo
         st.subheader(lang_dict.get('rails_1', "Suggestions"))
         st.caption(lang_dict.get('rails_2', "Try asking:"))
         if rails_dict:
             for i in sorted(rails_dict.keys()): st.markdown(f"{i}. {rails_dict[i]}")
         st.divider()
+        
+        # Sidebar organizada con pestañas.
+        st.header("Configuración")
+        chat_tab, admin_tab = st.tabs(["⚙️ Opciones de Chat", "🗂️ Admin de Datos"])
 
-        # Opciones de Chat
-        st.subheader(lang_dict.get('options_header', "Chat Options"))
+        with chat_tab:
+            st.markdown("##### Configuración de RAG y Memoria")
+            disable_vector_store = st.toggle(lang_dict.get('disable_vector_store', "Desactivar RAG"), value=False)
+            top_k_vectorstore = st.slider(lang_dict.get('top_k_vectorstore', "Documentos a recuperar (K)"), 1, 10, user_defaults.get("TOP_K_VECTORSTORE", 3), disabled=disable_vector_store)
+            
+            rag_strategies = ('Basic Retrieval', 'Maximal Marginal Relevance') # Fusion es más complejo, lo dejamos fuera por simplicidad de UI
+            default_strategy = user_defaults.get("RAG_STRATEGY", 'Basic Retrieval')
+            strategy = st.selectbox(lang_dict.get('rag_strategy', "Estrategia RAG"), rag_strategies, index=rag_strategies.index(default_strategy) if default_strategy in rag_strategies else 0, disabled=disable_vector_store)
+            
+            st.markdown("---")
+            disable_chat_history = st.toggle(lang_dict.get('disable_chat_history', "Desactivar Memoria"), value=False)
+            top_k_history = st.slider(lang_dict.get('k_chat_history', "Mensajes a recordar (K)"), 1, 10, user_defaults.get("TOP_K_HISTORY", 5), disabled=disable_chat_history)
+
+        with admin_tab:
+            if username in ADMIN_USERS:
+                st.markdown("##### Carga de Contenido")
+                with st.expander("Subir Archivos"):
+                    uploaded_files = st.file_uploader("Subir archivos TXT, PDF, CSV", type=['txt', 'pdf', 'csv'], accept_multiple_files=True)
+                    if st.button("Procesar Archivos"):
+                        if uploaded_files: vectorize_text(uploaded_files, vectorstore, lang_dict)
+                with st.expander("Cargar desde URLs"):
+                    urls_text = st.text_area("Introducir URLs (una por línea)")
+                    if st.button("Process URLs"):
+                        urls = [url.strip() for url in urls_text.split('\n') if url.strip()]
+                        if urls: vectorize_url(urls, vectorstore, lang_dict)
+                
+                st.markdown("---")
+                with st.expander("Ver Documentos Cargados"):
+                    st.caption("Muestra las fuentes de los documentos actualmente en la base de datos.")
+                    if st.button("Listar documentos en Astra DB"):
+                        with st.spinner("Buscando..."):
+                            document_sources = list_document_sources(vectorstore)
+                            if document_sources:
+                                st.write("Se han encontrado las siguientes fuentes:")
+                                for source_name in document_sources:
+                                    st.markdown(f"- `{source_name}`")
+                            else:
+                                st.warning("No se encontraron documentos en la base de datos.")
+            else:
+                st.info("No tienes permisos de administrador para cargar datos.")
         
-        user_defaults = st.secrets.get("DEFAULT_SETTINGS", {}).get(username, {})
-        
-        disable_chat_history = st.toggle(lang_dict.get('disable_chat_history', "Disable Chat History"), value=False)
-        top_k_history = st.slider(lang_dict.get('k_chat_history', "K for Chat History"), 1, 10, user_defaults.get("TOP_K_HISTORY", 5), disabled=disable_chat_history)
-        disable_vector_store = st.toggle(lang_dict.get('disable_vector_store', "Disable Vector Store?"), value=False)
-        top_k_vectorstore = st.slider(lang_dict.get('top_k_vectorstore', "Top-K for Vector Store"), 1, 10, user_defaults.get("TOP_K_VECTORSTORE", 5), disabled=disable_vector_store)
-        
-        rag_strategies = ('Basic Retrieval', 'Maximal Marginal Relevance', 'Fusion')
-        default_strategy = user_defaults.get("RAG_STRATEGY", 'Basic Retrieval')
-        strategy_idx = rag_strategies.index(default_strategy) if default_strategy in rag_strategies else 0
-        strategy = st.selectbox(lang_dict.get('rag_strategy', "RAG Strategy"), rag_strategies, index=strategy_idx, disabled=disable_vector_store)
-        
+        # Opciones de Prompt fuera de las pestañas pero en la sidebar
+        st.divider()
+        st.header("Personalidad del Asistente")
         prompt_options = ('Short results', 'Extended results', 'Custom')
         default_prompt_type = user_defaults.get("PROMPT_TYPE", 'Custom')
-        prompt_idx = prompt_options.index(default_prompt_type) if default_prompt_type in prompt_options else 2
+        prompt_type = st.selectbox("Estilo de respuesta", prompt_options, index=prompt_options.index(default_prompt_type) if default_prompt_type in prompt_options else 2)
+        custom_prompt_text_val = get_custom_prompt(username)
+        custom_prompt = st.text_area("Prompt Personalizado", value=custom_prompt_text_val, height=250, disabled=(prompt_type != 'Custom'))
 
-        try:
-            custom_prompt_text_val = Path(f"./customizations/prompt/{username}.txt").read_text(encoding='utf-8')
-        except:
-            try:
-                custom_prompt_text_val = Path("./customizations/prompt/default.txt").read_text(encoding='utf-8')
-            except:
-                custom_prompt_text_val = "Error: No se encontró el archivo de prompt default.txt"
-
-        prompt_type = st.selectbox(lang_dict.get('system_prompt', "System Prompt"), prompt_options, index=prompt_idx)
-        custom_prompt = st.text_area(lang_dict.get('custom_prompt', "Custom Prompt"), value=custom_prompt_text_val, disabled=(prompt_type != 'Custom'))
-        st.divider()
-
-        # Herramientas de Administración
-        if username in ADMIN_USERS:
-            st.subheader(lang_dict.get('admin_tools_header', "Admin Tools"))
-            with st.expander("Upload Files"):
-                uploaded_files = st.file_uploader("Upload TXT, PDF, CSV files", type=['txt', 'pdf', 'csv'], accept_multiple_files=True)
-                if st.button("Process Files"):
-                    if uploaded_files: vectorize_text(uploaded_files, vectorstore, lang_dict)
-            with st.expander("Load from URLs"):
-                urls_text = st.text_area("Enter URLs (comma-separated)")
-                if st.button("Process URLs"):
-                    urls = [url.strip() for url in urls_text.split(',') if url.strip()]
-                    if urls: vectorize_url(urls, vectorstore, lang_dict)
 else: # Si el usuario es 'demo'
-    # Inyectar CSS para ocultar la sidebar
     st.markdown("""<style>[data-testid="stSidebar"] {display: none}</style>""", unsafe_allow_html=True)
-    
-    # Definir valores por defecto para que la app no falle
+    # Definimos aquí los parámetros para el usuario 'demo'. Más limpio.
     user_defaults = st.secrets.get("DEFAULT_SETTINGS", {}).get(username, {})
     disable_chat_history = True
     top_k_history = 0
@@ -367,18 +416,12 @@ else: # Si el usuario es 'demo'
     top_k_vectorstore = user_defaults.get("TOP_K_VECTORSTORE", 5)
     strategy = user_defaults.get("RAG_STRATEGY", 'Basic Retrieval')
     prompt_type = user_defaults.get("PROMPT_TYPE", 'Custom')
-    try:
-        # Intenta cargar el prompt para 'demo' o el default
-        user_prompt_file = Path(f"./customizations/prompt/demo.txt")
-        if user_prompt_file.is_file():
-            custom_prompt = user_prompt_file.read_text(encoding='utf-8')
-        else:
-            custom_prompt = Path("./customizations/prompt/default.txt").read_text(encoding='utf-8')
-    except:
-        custom_prompt = "Responde basándote en el contexto proporcionado."
+    custom_prompt = get_custom_prompt(username)
+
 
 # Inicializar memoria
 memory = load_memory_rc(chat_history, top_k_history if not disable_chat_history else 0) if chat_history else None
+
 
 # --- COPIA Y PEGA ESTE BLOQUE COMPLETO HASTA EL FINAL DEL ARCHIVO ---
 
@@ -386,18 +429,18 @@ memory = load_memory_rc(chat_history, top_k_history if not disable_chat_history 
 
 # 1. Inyectamos el CSS final para centrar el layout y el logo
 st.markdown("""
-    <style>
-        /* Contenedor principal para los mensajes y el encabezado */
-        section[data-testid="st.main"] .block-container {
-            max-width: 55% !important; /* <-- AÑADIDO !important PARA FORZAR LA REGLA */
-            margin: 0 auto !important;
-        }
-        /* Contenedor del campo de texto del chat */
-        [data-testid="stChatInputContainer"] {
-            max-width: 55% !important; /* <-- AÑADIDO !important PARA FORZAR LA REGLA */
-            margin: 0 auto !important;
-        }
-    </style>
+    <style>
+        /* Contenedor principal para los mensajes y el encabezado */
+        section[data-testid="st.main"] .block-container {
+            max-width: 55% !important; /* <-- AÑADIDO !important PARA FORZAR LA REGLA */
+            margin: 0 auto !important;
+        }
+        /* Contenedor del campo de texto del chat */
+        [data-testid="stChatInputContainer"] {
+            max-width: 55% !important; /* <-- AÑADIDO !important PARA FORZAR LA REGLA */
+            margin: 0 auto !important;
+        }
+    </style>
 """, unsafe_allow_html=True)
 
 
@@ -405,119 +448,117 @@ st.markdown("""
 # Función para codificar la imagen a base64 (así la podemos meter en el HTML)
 import base64
 def get_image_as_base64(path):
-    try:
-        with open(path, "rb") as f:
-            data = f.read()
-        return base64.b64encode(data).decode()
-    except Exception:
-        return ""
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+        return base64.b64encode(data).decode()
+    except Exception:
+        return ""
 
 # Obtenemos la imagen del logo en base64
 logo_base64 = get_image_as_base64("./customizations/logo/anim-logo-1fps-verde.gif")
 
 # Un solo bloque de HTML para todo el encabezado, asegurando el centrado
 st.markdown(f"""
-    <div style="text-align: center;">
-        <img src="data:image/gif;base64,{logo_base64}" alt="Logo" width="150">
-        <h1>Agente Experto IA para Fondos</h1>
-        <p>Por OPENLAB VENTURES, S.L. ®</p>
-        <p style="color: #9c9d9f; font-size: 0.9rem;">Tu consultor virtual especializado en la introducción estratégica de la Inteligencia Artificial en los procesos internos de Venture Capital y Private Equity.</p>
-    </div>
+    <div style="text-align: center;">
+        <img src="data:image/gif;base64,{logo_base64}" alt="Logo" width="150">
+        <h1>Agente Experto IA para Fondos</h1>
+        <p>Por OPENLAB VENTURES, S.L. ®</p>
+        <p style="color: #9c9d9f; font-size: 0.9rem;">Tu consultor virtual especializado en la introducción estratégica de la Inteligencia Artificial en los procesos internos de Venture Capital y Private Equity.</p>
+    </div>
 """, unsafe_allow_html=True)
 
 st.divider()
 
-# --- COPIA Y PEGA ESTE BLOQUE COMPLETO HASTA EL FINAL ---
 
 # 3. Lógica de visualización del chat
 # Mensajes de bienvenida y botones de sugerencia (si es una sesión nueva)
 if not st.session_state.messages:
-    # Mostramos el nuevo texto de bienvenida que querías
-    st.info("Escribe tu pregunta en el cuadro de abajo o selecciona alguna de las siguientes sugerencias de preguntas")
-    
-    # --- AÑADIMOS LAS PREGUNTAS FIJAS (CON EL TEXTO ACTUALIZADO) ---
-    PREGUNTAS_SUGERIDAS = [
-        "¿Qué pasos iniciales debo dar para introducir IA en mi fondo?",
-        "Háblame de casos de éxito de fondos que ya usan la IA",
-        "¿Cómo está la IA transformando el deal sourcing en VC y PE?"
-    ]
-    
-    # Creamos 3 columnas para los 3 botones
-    cols = st.columns(len(PREGUNTAS_SUGERIDAS))
-    
-    # Creamos un botón en cada columna
-    for i, pregunta in enumerate(PREGUNTAS_SUGERIDAS):
-        if cols[i].button(pregunta, key=f"rail_fijo_{i}"):
-            st.session_state.question_from_button = pregunta
-            st.rerun()
-    
+    # Mostramos el nuevo texto de bienvenida que querías
+    st.info("Escribe tu pregunta en el cuadro de abajo o selecciona alguna de las siguientes sugerencias de preguntas")
+    
+    # --- AÑADIMOS LAS PREGUNTAS FIJAS (CON EL TEXTO ACTUALIZADO) ---
+    PREGUNTAS_SUGERIDAS = [
+        "¿Qué pasos iniciales debo dar para introducir IA en mi fondo?",
+        "Háblame de casos de éxito de fondos que ya usan la IA",
+        "¿Cómo está la IA transformando el deal sourcing en VC y PE?"
+    ]
+    
+    # Creamos 3 columnas para los 3 botones
+    cols = st.columns(len(PREGUNTAS_SUGERIDAS))
+    
+    # Creamos un botón en cada columna
+    for i, pregunta in enumerate(PREGUNTAS_SUGERIDAS):
+        if cols[i].button(pregunta, key=f"rail_fijo_{i}"):
+            st.session_state.question_from_button = pregunta
+            st.rerun()
+    
 # Mostrar todo el historial de chat en cada ejecución
 for message in st.session_state.messages:
-    avatar_icon = "🤖" if message.type == "ai" else "🧑‍💻"
-    with st.chat_message(message.type, avatar=avatar_icon):
-        st.markdown(message.content)
+    avatar_icon = "🤖" if message.type == "ai" else "🧑‍💻"
+    with st.chat_message(message.type, avatar=avatar_icon):
+        st.markdown(message.content)
 
 # Lógica para mostrar la pregunta sugerida dinámica (después de una respuesta)
 if "suggested_question" in st.session_state and st.session_state.suggested_question:
-    if st.button(f"Sugerencia: *{st.session_state.suggested_question}*"):
-        st.session_state.question_from_button = st.session_state.suggested_question
-        del st.session_state.suggested_question 
-        st.rerun()
+    if st.button(f"Sugerencia: *{st.session_state.suggested_question}*"):
+        st.session_state.question_from_button = st.session_state.suggested_question
+        del st.session_state.suggested_question 
+        st.rerun()
 
 
 # 4. Lógica para recibir una nueva pregunta del usuario
 question = st.session_state.pop("question_from_button", None)
 if not question:
-    if user_query := st.chat_input(lang_dict.get('assistant_question', "Pregunta lo que quieras...")):
-        question = user_query
+    if user_query := st.chat_input(lang_dict.get('assistant_question', "Pregunta lo que quieras...")):
+        question = user_query
 
 
 # 5. Lógica para procesar la pregunta, si existe una
 if question:
-    st.session_state.messages.append(HumanMessage(content=question))
-    with st.chat_message('human', avatar="🧑‍💻"):
-        st.markdown(question)
+    st.session_state.messages.append(HumanMessage(content=question))
+    with st.chat_message('human', avatar="🧑‍💻"):
+        st.markdown(question)
 
-    with st.chat_message('assistant', avatar="🤖"):
-        response_placeholder = st.empty()
-        
-        if not model or (not disable_vector_store and not vectorstore):
-            response_placeholder.markdown("Lo siento, el asistente no está completamente configurado.")
-        else:
-            relevant_documents = []
-            if not disable_vector_store:
-                if strategy == 'Maximal Marginal Relevance':
-                    relevant_documents = vectorstore.max_marginal_relevance_search(query=question, k=top_k_vectorstore)
-                else: 
-                    retriever = vectorstore.as_retriever(search_kwargs={"k": top_k_vectorstore})
-                    relevant_documents = retriever.get_relevant_documents(query=question)
-            
-            memory = load_memory_rc(chat_history, top_k_history if not disable_chat_history else 0)
-            history = memory.load_memory_variables({}).get('chat_history', [])
-            
-            rag_chain_inputs = {'context': lambda x: x['context'], 'chat_history': lambda x: x['chat_history'], 'question': lambda x: x['question']}
-            current_prompt_obj = get_prompt(prompt_type, custom_prompt, language)
-            chain = RunnableMap(rag_chain_inputs) | current_prompt_obj | model
+    with st.chat_message('assistant', avatar="🤖"):
+        response_placeholder = st.empty()
+        
+        if not model or (not disable_vector_store and not vectorstore):
+            response_placeholder.markdown("Lo siento, el asistente no está completamente configurado.")
+        else:
+            relevant_documents = []
+            if not disable_vector_store:
+                if strategy == 'Maximal Marginal Relevance':
+                    relevant_documents = vectorstore.max_marginal_relevance_search(query=question, k=top_k_vectorstore)
+                else: 
+                    retriever = vectorstore.as_retriever(search_kwargs={"k": top_k_vectorstore})
+                    relevant_documents = retriever.get_relevant_documents(query=question)
+            
+            memory = load_memory_rc(chat_history, top_k_history if not disable_chat_history else 0)
+            history = memory.load_memory_variables({}).get('chat_history', [])
+            
+            rag_chain_inputs = {'context': lambda x: x['context'], 'chat_history': lambda x: x['chat_history'], 'question': lambda x: x['question']}
+            current_prompt_obj = get_prompt(prompt_type, custom_prompt, language)
+            chain = RunnableMap(rag_chain_inputs) | current_prompt_obj | model
 
-            try:
-                response = chain.invoke(
-                    {'question': question, 'chat_history': history, 'context': relevant_documents},
-                    config={'callbacks': [StreamHandler(response_placeholder)]}
-                )
-                final_content = response.content
-                
-                if memory: 
-                    memory.save_context({'question': question}, {'answer': final_content})
-                
-                st.session_state.messages.append(AIMessage(content=final_content))
-                
-                with st.spinner("Generando sugerencia..."):
-                    suggested_question = generate_follow_up_question(question, final_content, model)
-                    if suggested_question:
-                        st.session_state.suggested_question = suggested_question
-                
-                st.rerun()
+            try:
+                response = chain.invoke(
+                    {'question': question, 'chat_history': history, 'context': relevant_documents},
+                    config={'callbacks': [StreamHandler(response_placeholder)]}
+                )
+                final_content = response.content
+                
+                if memory: 
+                    memory.save_context({'question': question}, {'answer': final_content})
+                
+                st.session_state.messages.append(AIMessage(content=final_content))
+                
+                with st.spinner("Generando sugerencia..."):
+                    suggested_question = generate_follow_up_question(question, final_content, model)
+                    if suggested_question:
+                        st.session_state.suggested_question = suggested_question
+                
+                st.rerun()
 
-            except Exception as e:
-                st.error(f"Error durante la generación de la respuesta: {e}")
-
+            except Exception as e:
+                st.error(f"Error durante la generación de la respuesta: {e}")
