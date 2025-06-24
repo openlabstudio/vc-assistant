@@ -32,6 +32,8 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "session_id" not in st.session_state:
     st.session_state.session_id = str(uuid.uuid4())
+if "header_drawn" not in st.session_state: # Añadido para controlar el dibujado del encabezado
+    st.session_state.header_drawn = False
 
 
 # --- CONFIGURACIÓN GLOBAL ---
@@ -118,7 +120,7 @@ def vectorize_text(uploaded_files, vectorstore, lang_dict):
                         doc.metadata["source"] = uploaded_file.name
                         
                     if docs:
-                        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
+                        text_splitter = RecursiveCharacterTextTextSplitter(chunk_size=1000, chunk_overlap=150)
                         pages = text_splitter.split_documents(docs)
                         vectorstore.add_documents(pages)
                         st.info(f"✅ {uploaded_file.name} processed ({len(pages)} segments).")
@@ -235,7 +237,7 @@ def list_document_sources(vectorstore):
     try:
         # Hacemos una búsqueda de similitud con un término genérico para obtener documentos.
         # Pedimos un número alto (k=1000) para intentar obtener una muestra representativa.
-        results = vectorstore.similarity_search("*", k=1000)
+        results = vectorstore.similarity_similarity_search("*", k=1000)
         
         # Usamos un set para guardar solo los nombres de archivo únicos
         sources = set()
@@ -491,7 +493,7 @@ if not st.session_state.messages:
 # Mostrar todo el historial de chat en cada ejecución
 for message in st.session_state.messages:
     avatar_icon = "🤖" if message.type == "ai" else "🧑‍💻"
-    with st.chat_message(message.type, avatar=avatar_icon):
+    with st.chat_message(type, avatar=avatar_icon): # ERROR: type NO DEFINIDO
         st.markdown(message.content)
 
 # Lógica para mostrar la pregunta sugerida dinámica (después de una respuesta)
