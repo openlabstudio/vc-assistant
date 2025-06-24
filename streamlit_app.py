@@ -440,13 +440,13 @@ if not st.session_state.header_drawn:
         <style>
             /* Contenedor principal de toda la aplicación Streamlit */
             div[data-testid="stAppViewContainer"] {
-                max-width: 55% !important; 
+            max-width: 55% !important; 
                 margin: 0 auto !important;
             }
             /* Contenedor del campo de texto del chat */
             [data-testid="stChatInputContainer"] {
-                max-width: 55% !important; 
-                margin: 0 auto !important;
+            max-width: 55% !important; 
+            margin: 0 auto !important;
             }
         </style>
     """, unsafe_allow_html=True)
