@@ -435,36 +435,36 @@ memory = load_memory_rc(chat_history, top_k_history if not disable_chat_history 
 
 # 1. Inyectamos el CSS final para centrar el layout y el logo
 # Protegemos este bloque para que solo se dibuje una vez por sesión
-    st.markdown("""
-        <style>
-            /* Contenedor principal de toda la aplicación Streamlit */
-            div[data-testid="stAppViewContainer"] {
-            max-width: 55% !important; 
-                margin: 0 auto !important;
-            }
-            /* Contenedor del campo de texto del chat */
-            [data-testid="stChatInputContainer"] {
+st.markdown("""
+    <style>
+        /* Contenedor principal de toda la aplicación Streamlit */
+        div[data-testid="stAppViewContainer"] {
             max-width: 55% !important; 
             margin: 0 auto !important;
-            }
-        </style>
-    """, unsafe_allow_html=True)
+        }
+        /* Contenedor del campo de texto del chat */
+        [data-testid="stChatInputContainer"] {
+            max-width: 55% !important; 
+            margin: 0 auto !important;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
+# 2️⃣ Sólo una vez: dibujar header (nivel 0 también)
 if not st.session_state.header_drawn:
-     # —————— aquí solo queda el HTML del header ——————
-     logo_base64 = get_image_as_base64("./customizations/logo/anim-logo-1fps-verde.gif")
-     st.markdown(f"""
-         <div style="text-align: center;">
-             <img src="data:image/gif;base64,{logo_base64}" alt="Logo" width="150">
-             <h1>Agente Experto IA para Fondos</h1>
-             <p>Por OPENLAB VENTURES, S.L. ®</p>
-             <p style="color: #9c9d9f; font-size: 0.9rem;">
-                 Tu consultor virtual especializado…
-             </p>
-         </div>
-     """, unsafe_allow_html=True)
-     st.divider()
-     st.session_state.header_drawn = True
+    logo_base64 = get_image_as_base64("./customizations/logo/anim-logo-1fps-verde.gif")
+    st.markdown(f"""
+        <div style="text-align: center;">
+            <img src="data:image/gif;base64,{logo_base64}" alt="Logo" width="150">
+            <h1>Agente Experto IA para Fondos</h1>
+            <p>Por OPENLAB VENTURES, S.L. ®</p>
+            <p style="color: #9c9d9f; font-size: 0.9rem;">
+                Tu consultor virtual especializado…
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
+    st.divider()
+    st.session_state.header_drawn = True
 
 
 # 3. Lógica de visualización del chat
