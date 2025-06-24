@@ -435,7 +435,6 @@ memory = load_memory_rc(chat_history, top_k_history if not disable_chat_history 
 
 # 1. Inyectamos el CSS final para centrar el layout y el logo
 # Protegemos este bloque para que solo se dibuje una vez por sesión
-if not st.session_state.header_drawn:
     st.markdown("""
         <style>
             /* Contenedor principal de toda la aplicación Streamlit */
@@ -451,25 +450,21 @@ if not st.session_state.header_drawn:
         </style>
     """, unsafe_allow_html=True)
 
-
-    # 2. Definimos y mostramos el encabezado de forma robusta
-    # La función get_image_as_base64 ha sido movida a la sección de CLASES Y FUNCIONES arriba.
-    
-    # Obtenemos la imagen del logo en base64
-    logo_base64 = get_image_as_base64("./customizations/logo/anim-logo-1fps-verde.gif")
-
-    # Un solo bloque de HTML para todo el encabezado, asegurando el centrado
-    st.markdown(f"""
-        <div style="text-align: center;">
-            <img src="data:image/gif;base64,{logo_base64}" alt="Logo" width="150">
-            <h1>Agente Experto IA para Fondos</h1>
-            <p>Por OPENLAB VENTURES, S.L. ®</p>
-            <p style="color: #9c9d9f; font-size: 0.9rem;">Tu consultor virtual especializado en la introducción estratégica de la Inteligencia Artificial en los procesos internos de Venture Capital y Private Equity.</p>
-        </div>
-    """, unsafe_allow_html=True)
-
-    st.divider()
-    st.session_state.header_drawn = True # Marcamos que el encabezado ya se dibujó
+if not st.session_state.header_drawn:
+     # —————— aquí solo queda el HTML del header ——————
+     logo_base64 = get_image_as_base64("./customizations/logo/anim-logo-1fps-verde.gif")
+     st.markdown(f"""
+         <div style="text-align: center;">
+             <img src="data:image/gif;base64,{logo_base64}" alt="Logo" width="150">
+             <h1>Agente Experto IA para Fondos</h1>
+             <p>Por OPENLAB VENTURES, S.L. ®</p>
+             <p style="color: #9c9d9f; font-size: 0.9rem;">
+                 Tu consultor virtual especializado…
+             </p>
+         </div>
+     """, unsafe_allow_html=True)
+     st.divider()
+     st.session_state.header_drawn = True
 
 
 # 3. Lógica de visualización del chat
