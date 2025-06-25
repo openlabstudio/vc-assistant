@@ -334,6 +334,7 @@ if not check_password():
 username = st.session_state.user
 language = st.secrets.get("languages", {}).get(username, "es_ES")
 lang_dict = load_localization(language)
+user_defaults = st.secrets.get("DEFAULT_SETTINGS", {}).get(username, {})
 
 embedding = load_embedding_rc()
 vectorstore = load_vectorstore_rc(embedding) if embedding else None
