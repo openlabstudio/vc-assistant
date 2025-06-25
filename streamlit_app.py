@@ -365,7 +365,7 @@ if username != "demo":
         with chat_tab:
             st.markdown("##### Configuración de RAG y Memoria")
             disable_vector_store = st.toggle(lang_dict.get('disable_vector_store', "Desactivar RAG"), value=False)
-            top_k_vectorstore = st.slider(lang_dict.get('top_k_vectorstore', "Documentos a recuperar (K)"), 1, 10, user_defaults.get("TOP_K_VECTORSTORE", 3), disabled=disable_vector_store)
+            top_k_vectorstore = st.slider(lang_dict.get('top_k_vectorstore', "Documentos a recuperar (K)"), 1, 15, user_defaults.get("TOP_K_VECTORSTORE", 5), disabled=disable_vector_store)
             
             rag_strategies = ('Basic Retrieval', 'Maximal Marginal Relevance', 'Fusion')
             default_strategy = user_defaults.get("RAG_STRATEGY", 'Basic Retrieval')
