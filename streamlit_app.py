@@ -547,42 +547,44 @@ if question:
         
 if not model or (not disable_vector_store and not vectorstore):
     response_placeholder.markdown("Lo siento, el asistente no está completamente configurado.")
-else:
-    # ----------------------------------
-    # Recuperamos los documentos relevantes
-    # ----------------------------------
-    relevant_documents = []
-    if not disable_vector_store:
-        if strategy == 'Maximal Marginal Relevance':
-            relevant_documents = vectorstore.max_marginal_relevance_search(
-                query=question, k=top_k_vectorstore
-            )
         else:
-            retriever = vectorstore.as_retriever(search_kwargs={"k": top_k_vectorstore})
-            relevant_documents = retriever.get_relevant_documents(query=question)
+            # ----------------------------------
+            # Recuperamos los documentos relevantes
+            # ----------------------------------
+            relevant_documents = []
+            if not disable_vector_store:
+                if strategy == 'Maximal Marginal Relevance':
+                    relevant_documents = vectorstore.max_marginal_relevance_search(
+                        query=question, k=top_k_vectorstore
+                    )
+                else:
+                    retriever = vectorstore.as_retriever(search_kwargs={"k": top_k_vectorstore})
+                    relevant_documents = retriever.get_relevant_documents(query=question)
 
-    # ---------- BLOQUE DE DEPURACIÓN ----------
-    # Muestra en la barra lateral los chunks recuperados
-    if not disable_vector_store:
-        with st.sidebar.expander("📝 Chunks recuperados", expanded=False):
-            for i, doc in enumerate(relevant_documents, start=1):
-                src = doc.metadata.get("source", "sin_fuente")
-                preview = doc.page_content[:200].replace("\n", " ")
-                st.markdown(f"**{i}. {src}**  \n{preview}…")
-    # ---------- FIN DEPURACIÓN -----------------
+            # ---------- BLOQUE DE DEPURACIÓN ----------
+            # Muestra en la barra lateral los chunks recuperados
+            if not disable_vector_store:
+                with st.sidebar.expander("📝 Chunks recuperados", expanded=False):
+                    for i, doc in enumerate(relevant_documents, start=1):
+                        src = doc.metadata.get("source", "sin_fuente")
+                        preview = doc.page_content[:200].replace("\n", " ")
+                        st.markdown(f"**{i}. {src}**  \n{preview}…")
+            # ---------- FIN DEPURACIÓN -----------------
 
-    # Memoria y resto del pipeline
-    memory = load_memory_rc(chat_history,
-                            top_k_history if not disable_chat_history else 0)
-    history = memory.load_memory_variables({}).get('chat_history', [])
+            # Memoria y resto del pipeline
+            memory = load_memory_rc(
+                chat_history,
+                top_k_history if not disable_chat_history else 0
+            )
+            history = memory.load_memory_variables({}).get('chat_history', [])
 
-    rag_chain_inputs = {
-        'context': lambda x: x['context'],
-        'chat_history': lambda x: x['chat_history'],
-        'question': lambda x: x['question']
-    }
-    current_prompt_obj = get_prompt(prompt_type, custom_prompt, language)
-    chain = RunnableMap(rag_chain_inputs) | current_prompt_obj | model
+            rag_chain_inputs = {
+                'context': lambda x: x['context'],
+                'chat_history': lambda x: x['chat_history'],
+                'question': lambda x: x['question']
+            }
+            current_prompt_obj = get_prompt(prompt_type, custom_prompt, language)
+            chain = RunnableMap(rag_chain_inputs) | current_prompt_obj | model
 
             try:
                 response = chain.invoke(
