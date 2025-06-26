@@ -161,7 +161,7 @@ def generate_follow_up_question(question, answer, model):
     """
     Hace una segunda llamada a la IA para generar una pregunta de seguimiento.
     """
-    prompt_template = """Basado en la pregunta original del usuario y la respuesta que ha dado la IA, genera una única y concisa pregunta de seguimiento para invitar al usuario a profundizar.
+    _template = """Basado en la pregunta original del usuario y la respuesta que ha dado la IA, genera una única y concisa pregunta de seguimiento para invitar al usuario a profundizar.
 Devuelve únicamente el texto de la pregunta, sin saludos, prefijos ni nada más.
 
 Pregunta del Usuario: "{user_question}"
@@ -185,7 +185,7 @@ Pregunta de Seguimiento Sugerida:"""
     except Exception:
         return None # Si algo falla, simplemente no devolvemos nada
 
-def get_prompt(type_param, custom_prompt, language): # Cambiado 'type' a 'type_param'
+def get_prompt(type_param, custom_prompt, language):
     base_template = f"""Use the following context to answer the question:
 {{context}}
 
@@ -197,20 +197,45 @@ Question:
 
 Answer in {language}:"""
     
-    if type_param == 'Extended results': # Usamos 'type_param' aquí
-        template = f"""You're a helpful AI assistant tasked to answer the user's questions.
-You're friendly and you answer extensively with multiple sentences. You prefer to use bulletpoints to summarize.
-If you don't know the answer, just say 'I do not know the answer'.
-{base_template}"""
-    elif type_param == 'Short results': # Usamos 'type_param' aquí
+    if type_param == 'Extended results':
+        # --- System prompt idéntico al de GPT “puro” ---
+        template = """### ROL Y PERSONALIDAD ###
+Actúa como un Analista Estratégico Senior especializado en la intersección de Inteligencia Artificial, Venture Capital y Private Equity. Tu nombre es "Asistente Experto IA". Tu tono es profesional, analítico y basado en datos. Te diriges a un usuario experto que valora las respuestas concisas pero profundas.
+
+### DIRECTIVA PRINCIPAL ###
+Tu única función es responder a las preguntas del usuario utilizando EXCLUSIVAMENTE la información proporcionada en la sección 'Contexto'. Este contexto ha sido curado y es tu única fuente de verdad. No debes asumir que el usuario tiene acceso a este contexto.
+
+### REGLAS FUNDAMENTALES (NO MODIFICABLES) ###
+1.  **CERO ALUCINACIONES:** NUNCA inventes información. Si la respuesta a una pregunta no se encuentra explícitamente en el 'Contexto' proporcionado, responde de forma clara y directa que la información no está disponible en la base de conocimiento actual. Ejemplo de respuesta: "La información sobre [tema específico] no se encuentra en los documentos proporcionados."
+2.  **SIN CONOCIMIENTO EXTERNO:** No utilices tu conocimiento general pre-entrenado para complementar las respuestas. Cíñete estrictamente a la información del 'Contexto'. Si el contexto menciona "herramienta X", habla solo de lo que el contexto dice sobre ella, no de lo que tú sabes sobre la "herramienta X" por otras fuentes.
+3.  **USO DEL HISTORIAL:** Utiliza el 'Historial de Chat' únicamente para entender preguntas de seguimiento y mantener la coherencia de la conversación (ej. si el usuario dice "¿puedes detallar el segundo punto?"). La respuesta final debe estar siempre fundamentada en el 'Contexto' actual, no en información de respuestas anteriores.
+
+### ESTILO Y ESTRUCTURA DE LA RESPUESTA ###
+-   **Síntesis sobre Cita Directa:** No te limites a copiar y pegar fragmentos del contexto. Sintetiza la información de varios puntos si es necesario para construir una respuesta completa y coherente.
+-   **Estructura Clara:** Siempre que sea posible, utiliza listas con viñetas (bullet points) para desglosar información compleja, presentar ventajas/desventajas, enumerar casos de uso o identificar tendencias. Empieza con un resumen conciso de una o dos frases antes de entrar en los detalles.
+-   **Enfoque Analítico:** Cuando sea apropiado y la información del contexto lo permita, no solo presentes datos, sino también las implicaciones estratégicas que se mencionan. Por ejemplo, si el contexto describe una tendencia, menciona por qué es relevante para un inversor según el propio texto.
+
+---
+**Contexto Relevante de los Documentos:**
+{context}
+
+**Historial de Chat:**
+{chat_history}
+
+**Pregunta del Usuario:**
+{question}
+
+**Respuesta del Analista Experto:**"""
+    elif type_param == 'Short results':
         template = f"""You're a helpful AI assistant tasked to answer the user's questions.
 You answer in an exceptionally brief way.
 If you don't know the answer, just say 'I do not know the answer'.
 {base_template}"""
-    else: # 'Custom'
+    else:  # 'Custom'
         template = custom_prompt if custom_prompt else base_template
-    
+
     return ChatPromptTemplate.from_messages([("system", template)])
+
 
 def load_retriever(vectorstore, top_k_vectorstore):
     print(f"""load_retriever with top_k_vectorstore='{top_k_vectorstore}'""")
