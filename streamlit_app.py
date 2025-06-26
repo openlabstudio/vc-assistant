@@ -555,7 +555,8 @@ else:
     if not disable_vector_store:
         if strategy == 'Maximal Marginal Relevance':
             relevant_documents = vectorstore.max_marginal_relevance_search(
-                query=question, k=top_k_vectorstore
+                query=question,
+                k=top_k_vectorstore
             )
         else:
             retriever = vectorstore.as_retriever(search_kwargs={"k": top_k_vectorstore})
@@ -569,9 +570,11 @@ else:
                 src = doc.metadata.get("source", "sin_fuente")
                 preview = doc.page_content[:200].replace("\n", " ")
                 st.markdown(f"**{i}. {src}**  \n{preview}…")
-    # ---------- FIN DEPURACIÓN -----------------
+    # ---------- FIN DEPURACIÓN ----------
 
-    # Memoria y resto del pipeline
+    # ----------------------------------
+    # Memoria y construcción del RAG chain
+    # ----------------------------------
     memory = load_memory_rc(
         chat_history,
         top_k_history if not disable_chat_history else 0
@@ -579,31 +582,44 @@ else:
     history = memory.load_memory_variables({}).get('chat_history', [])
 
     rag_chain_inputs = {
-        'context': lambda x: x['context'],
-        'chat_history': lambda x: x['chat_history'],
-        'question': lambda x: x['question']
+        "context": lambda x: x["context"],
+        "chat_history": lambda x: x["chat_history"],
+        "question":  lambda x: x["question"],
     }
     current_prompt_obj = get_prompt(prompt_type, custom_prompt, language)
     chain = RunnableMap(rag_chain_inputs) | current_prompt_obj | model
 
-            try:
-                response = chain.invoke(
-                    {'question': question, 'chat_history': history, 'context': relevant_documents},
-                    config={'callbacks': [StreamHandler(response_placeholder)]}
-                )
-                final_content = response.content
-                
-                if memory: 
-                    memory.save_context({'question': question}, {'answer': final_content})
-                
-                st.session_state.messages.append(AIMessage(content=final_content))
-                
-                with st.spinner("Generando sugerencia..."):
-                    suggested_question = generate_follow_up_question(question, final_content, model)
-                    if suggested_question:
-                        st.session_state.suggested_question = suggested_question
-                
-                st.rerun()
+    # ----------------------------------
+    # Invocamos el chain con streaming y gestionamos respuesta
+    # ----------------------------------
+    try:
+        response = chain.invoke(
+            {
+                "question": question,
+                "chat_history": history,
+                "context": relevant_documents,
+            },
+            config={"callbacks": [StreamHandler(response_placeholder)]},
+        )
+        final_content = response.content
 
-            except Exception as e:
-                st.error(f"Error durante la generación de la respuesta: {e}")
+        # Guardamos en memoria
+        if memory:
+            memory.save_context({"question": question}, {"answer": final_content})
+
+        # Añadimos al historial visible
+        st.session_state.messages.append(AIMessage(content=final_content))
+
+        # Generamos una pregunta de seguimiento sugerida
+        with st.spinner("Generando sugerencia..."):
+            suggested_question = generate_follow_up_question(
+                question, final_content, model
+            )
+            if suggested_question:
+                st.session_state.suggested_question = suggested_question
+
+        # Forzamos rerun para refrescar la UI
+        st.rerun()
+
+    except Exception as e:
+        st.error(f"Error durante la generación de la respuesta: {e}")
