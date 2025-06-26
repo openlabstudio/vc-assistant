@@ -170,7 +170,7 @@ Respuesta de la IA: "{ai_answer}"
 
 Pregunta de Seguimiento Sugerida:"""
     
-    prompt = ChatPromptTemplate.from_template(prompt_template)
+    prompt = ChatPromptTemplate.from_template(_template)
     
     # Creamos una cadena simple solo para esta tarea
     chain = prompt | model | StrOutputParser()
