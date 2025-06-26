@@ -185,56 +185,84 @@ Pregunta de Seguimiento Sugerida:"""
     except Exception:
         return None # Si algo falla, simplemente no devolvemos nada
 
+from langchain.prompts import (
+    ChatPromptTemplate,
+    SystemMessagePromptTemplate,
+    HumanMessagePromptTemplate,
+)
+
 def get_prompt(type_param, custom_prompt, language):
-    base_template = f"""Use the following context to answer the question:
-{{context}}
-
-Use the following chat history to answer the question:
-{{chat_history}}
-
-Question:
-{{question}}
-
-Answer in {language}:"""
-    
-    if type_param == 'Extended results':
-        # --- System prompt idéntico al de GPT “puro” ---
-        template = """### ROL Y PERSONALIDAD ###
+    """
+    Devuelve un ChatPromptTemplate con los campos {context}, {chat_history} y
+    {question} listos para ser rellenados por RunnableMap.
+    """
+    # ---------------------- Extended results ----------------------
+    if type_param == "Extended results":
+        system_prompt = """### ROL Y PERSONALIDAD ###
 Actúa como un Analista Estratégico Senior especializado en la intersección de Inteligencia Artificial, Venture Capital y Private Equity. Tu nombre es "Asistente Experto IA". Tu tono es profesional, analítico y basado en datos. Te diriges a un usuario experto que valora las respuestas concisas pero profundas.
 
 ### DIRECTIVA PRINCIPAL ###
-Tu única función es responder a las preguntas del usuario utilizando EXCLUSIVAMENTE la información proporcionada en la sección 'Contexto'. Este contexto ha sido curado y es tu única fuente de verdad. No debes asumir que el usuario tiene acceso a este contexto.
+Tu única función es responder a las preguntas del usuario utilizando EXCLUSIVAMENTE la información proporcionada en la sección 'Contexto'.
 
 ### REGLAS FUNDAMENTALES (NO MODIFICABLES) ###
-1.  **CERO ALUCINACIONES:** NUNCA inventes información. Si la respuesta a una pregunta no se encuentra explícitamente en el 'Contexto' proporcionado, responde de forma clara y directa que la información no está disponible en la base de conocimiento actual. Ejemplo de respuesta: "La información sobre [tema específico] no se encuentra en los documentos proporcionados."
-2.  **SIN CONOCIMIENTO EXTERNO:** No utilices tu conocimiento general pre-entrenado para complementar las respuestas. Cíñete estrictamente a la información del 'Contexto'. Si el contexto menciona "herramienta X", habla solo de lo que el contexto dice sobre ella, no de lo que tú sabes sobre la "herramienta X" por otras fuentes.
-3.  **USO DEL HISTORIAL:** Utiliza el 'Historial de Chat' únicamente para entender preguntas de seguimiento y mantener la coherencia de la conversación (ej. si el usuario dice "¿puedes detallar el segundo punto?"). La respuesta final debe estar siempre fundamentada en el 'Contexto' actual, no en información de respuestas anteriores.
+1. **CERO ALUCINACIONES**  
+2. **SIN CONOCIMIENTO EXTERNO**  
+3. **USO DEL HISTORIAL**  
 
 ### ESTILO Y ESTRUCTURA DE LA RESPUESTA ###
--   **Síntesis sobre Cita Directa:** No te limites a copiar y pegar fragmentos del contexto. Sintetiza la información de varios puntos si es necesario para construir una respuesta completa y coherente.
--   **Estructura Clara:** Siempre que sea posible, utiliza listas con viñetas (bullet points) para desglosar información compleja, presentar ventajas/desventajas, enumerar casos de uso o identificar tendencias. Empieza con un resumen conciso de una o dos frases antes de entrar en los detalles.
--   **Enfoque Analítico:** Cuando sea apropiado y la información del contexto lo permita, no solo presentes datos, sino también las implicaciones estratégicas que se mencionan. Por ejemplo, si el contexto describe una tendencia, menciona por qué es relevante para un inversor según el propio texto.
+- Síntesis, listas con viñetas y enfoque analítico.
 
 ---
-**Contexto Relevante de los Documentos:**
+**Contexto Relevante de los Documentos:**  
 {context}
 
-**Historial de Chat:**
+**Historial de Chat:**  
 {chat_history}
 
-**Pregunta del Usuario:**
+**Pregunta del Usuario:**  
 {question}
 
 **Respuesta del Analista Experto:**"""
-    elif type_param == 'Short results':
-        template = f"""You're a helpful AI assistant tasked to answer the user's questions.
-You answer in an exceptionally brief way.
-If you don't know the answer, just say 'I do not know the answer'.
-{base_template}"""
-    else:  # 'Custom'
-        template = custom_prompt if custom_prompt else base_template
 
-    return ChatPromptTemplate.from_messages([("system", template)])
+        return ChatPromptTemplate.from_messages(
+            [
+                SystemMessagePromptTemplate.from_template(system_prompt),
+                HumanMessagePromptTemplate.from_template("{question}"),
+            ]
+        )
+
+    # ---------------------- Short results ----------------------
+    elif type_param == "Short results":
+        system_prompt = """Eres un asistente que responde de forma muy breve.
+Si no conoces la respuesta basándote en el contexto, di claramente
+'No conozco la respuesta basada en los documentos proporcionados'.
+
+Contexto:  
+{context}
+
+Historial:  
+{chat_history}
+
+Pregunta:  
+{question}
+"""
+        return ChatPromptTemplate.from_messages(
+            [
+                SystemMessagePromptTemplate.from_template(system_prompt),
+                HumanMessagePromptTemplate.from_template("{question}"),
+            ]
+        )
+
+    # ---------------------- Custom ----------------------
+    else:
+        # Si el usuario ha proporcionado un prompt personalizado, úsalo tal cual.
+        template = custom_prompt if custom_prompt else "{question}"
+        return ChatPromptTemplate.from_messages(
+            [
+                SystemMessagePromptTemplate.from_template(template),
+                HumanMessagePromptTemplate.from_template("{question}"),
+            ]
+        )
 
 
 def load_retriever(vectorstore, top_k_vectorstore):
