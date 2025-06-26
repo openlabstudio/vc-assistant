@@ -548,6 +548,9 @@ if question:
 if not model or (not disable_vector_store and not vectorstore):
     response_placeholder.markdown("Lo siento, el asistente no está completamente configurado.")
 else:
+    if not question:
+        st.warning("No se ha recibido ninguna pregunta. Por favor, escribe algo.")
+        st.stop()
     # ----------------------------------
     # Recuperamos los documentos relevantes
     # ----------------------------------
