@@ -615,6 +615,11 @@ with st.chat_message("assistant", avatar="🤖"):
     )
     history = memory.load_memory_variables({}).get("chat_history", [])
 
+    print("\n\n========== CONTEXTO PASADO AL PROMPT ==========\n")
+    for i, doc in enumerate(relevant_documents):
+        print(f"[Chunk {i+1}]\n{doc.page_content}\n")
+    print("========== FIN CONTEXTO ==========\n\n")
+    
     rag_chain_inputs = {
         "context": lambda x: x["context"],
         "chat_history": lambda x: x["chat_history"],
