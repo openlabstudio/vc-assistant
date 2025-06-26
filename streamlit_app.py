@@ -540,7 +540,6 @@ if not question:
 
 # 🚦 Verificación inmediata: si sigue sin haber pregunta válida, detenemos flujo
 if question is None or not str(question).strip():
-    st.warning("No se ha recibido ninguna pregunta. Por favor, escribe algo.")
     st.stop()
 
 # ──────────────────────────────────────────────────────────────────────────────
