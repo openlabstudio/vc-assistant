@@ -529,72 +529,74 @@ if "suggested_question" in st.session_state and st.session_state.suggested_quest
         st.rerun()
 
 
+# ──────────────────────────────────────────────────────────────────────────────
 # 4. Lógica para recibir una nueva pregunta del usuario
+# ──────────────────────────────────────────────────────────────────────────────
 question = st.session_state.pop("question_from_button", None)
 if not question:
-    if user_query := st.chat_input(lang_dict.get('assistant_question', "Pregunta lo que quieras...")):
+    if user_query := st.chat_input(lang_dict.get('assistant_question',
+                                                 "Pregunta lo que quieras...")):
         question = user_query
 
+# 🚦 Verificación inmediata: si sigue sin haber pregunta válida, detenemos flujo
+if question is None or not str(question).strip():
+    st.warning("No se ha recibido ninguna pregunta. Por favor, escribe algo.")
+    st.stop()
 
-# 5. Lógica para procesar la pregunta, si existe una
-if question:
-    st.session_state.messages.append(HumanMessage(content=question))
-    with st.chat_message('human', avatar="🧑‍💻"):
-        st.markdown(question)
+# ──────────────────────────────────────────────────────────────────────────────
+# 5. Lógica para procesar la pregunta
+# ──────────────────────────────────────────────────────────────────────────────
+st.session_state.messages.append(HumanMessage(content=question))
+with st.chat_message("human", avatar="🧑‍💻"):
+    st.markdown(question)
 
-    with st.chat_message('assistant', avatar="🤖"):
-        response_placeholder = st.empty()
-        
-if not model or (not disable_vector_store and not vectorstore):
-    response_placeholder.markdown("Lo siento, el asistente no está completamente configurado.")
-else:
-    if not question:
-        st.warning("No se ha recibido ninguna pregunta. Por favor, escribe algo.")
+with st.chat_message("assistant", avatar="🤖"):
+    response_placeholder = st.empty()
+
+    # Si faltan modelo o vectorstore, mostramos error y salimos
+    if not model or (not disable_vector_store and not vectorstore):
+        response_placeholder.markdown(
+            "Lo siento, el asistente no está completamente configurado."
+        )
         st.stop()
-    # ----------------------------------
-    # Recuperamos los documentos relevantes
-    # ----------------------------------
+
+    # ───────── Recuperamos los documentos relevantes ─────────
     relevant_documents = []
     if not disable_vector_store:
-        if strategy == 'Maximal Marginal Relevance':
+        if strategy == "Maximal Marginal Relevance":
             relevant_documents = vectorstore.max_marginal_relevance_search(
-                query=question,
-                k=top_k_vectorstore
+                query=question, k=top_k_vectorstore
             )
         else:
-            retriever = vectorstore.as_retriever(search_kwargs={"k": top_k_vectorstore})
+            retriever = vectorstore.as_retriever(
+                search_kwargs={"k": top_k_vectorstore}
+            )
             relevant_documents = retriever.get_relevant_documents(query=question)
 
-    # ---------- BLOQUE DE DEPURACIÓN ----------
-    # Muestra en la barra lateral los chunks recuperados
+    # ────────── Bloque de depuración: mostrar chunks ──────────
     if not disable_vector_store:
         with st.sidebar.expander("📝 Chunks recuperados", expanded=False):
             for i, doc in enumerate(relevant_documents, start=1):
                 src = doc.metadata.get("source", "sin_fuente")
                 preview = doc.page_content[:200].replace("\n", " ")
                 st.markdown(f"**{i}. {src}**  \n{preview}…")
-    # ---------- FIN DEPURACIÓN ----------
 
-    # ----------------------------------
-    # Memoria y construcción del RAG chain
-    # ----------------------------------
+    # ────────── Preparamos memoria y prompt ──────────
     memory = load_memory_rc(
         chat_history,
-        top_k_history if not disable_chat_history else 0
+        top_k_history if not disable_chat_history else 0,
     )
-    history = memory.load_memory_variables({}).get('chat_history', [])
+    history = memory.load_memory_variables({}).get("chat_history", [])
 
     rag_chain_inputs = {
         "context": lambda x: x["context"],
         "chat_history": lambda x: x["chat_history"],
-        "question":  lambda x: x["question"],
+        "question": lambda x: x["question"],
     }
     current_prompt_obj = get_prompt(prompt_type, custom_prompt, language)
     chain = RunnableMap(rag_chain_inputs) | current_prompt_obj | model
 
-    # ----------------------------------
-    # Invocamos el chain con streaming y gestionamos respuesta
-    # ----------------------------------
+    # ────────── Ejecutamos el chain con streaming ──────────
     try:
         response = chain.invoke(
             {
@@ -621,7 +623,7 @@ else:
             if suggested_question:
                 st.session_state.suggested_question = suggested_question
 
-        # Forzamos rerun para refrescar la UI
+        # Rerun para refrescar UI
         st.rerun()
 
     except Exception as e:
