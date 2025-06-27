@@ -95,9 +95,7 @@ def get_image_as_base64(path):
         return ""
 
 import hashlib
-from langchain_community.document_loaders import PyPDFDirectoryLoader
 from langchain.schema import Document
-from tqdm import tqdm  # opcional (se ve sólo en logs)
 
 def vectorize_text(uploaded_files, vectorstore, lang_dict):
     if not vectorstore:
@@ -105,70 +103,62 @@ def vectorize_text(uploaded_files, vectorstore, lang_dict):
                                "Vectorstore not ready for upload."))
         return
 
-    for uploaded_file in uploaded_files:
-        if uploaded_file is None:
-            continue
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=500,
+        chunk_overlap=50,
+        separators=["\n\n", "\n", ".", " "],
+    )
 
-        ext = Path(uploaded_file.name).suffix.lower()
+    total_chunks = 0
 
-        # ───── 1. Guardar archivo temporal ─────
-        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp_file:
-            tmp_file.write(uploaded_file.getvalue())
-            tmp_path = Path(tmp_file.name)
+    for up_file in uploaded_files:
+        ext = Path(up_file.name).suffix.lower()
+
+        # 1. Guardamos el archivo en un temp file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+            tmp.write(up_file.getvalue())
+            tmp_path = tmp.name  # ruta física en disco
 
         try:
-            # ───── 2. Cargar documento según tipo ─────
+            # 2. Seleccionamos loader según tipo
             if ext == ".pdf":
-                loader = PyPDFDirectoryLoader(str(tmp_path.parent))
-                docs = loader.load()  # obtiene 1 Document por página
+                loader = PyPDFLoader(tmp_path)
+            elif ext == ".csv":
+                loader = CSVLoader(tmp_path, encoding="utf-8")
             elif ext == ".txt":
                 with open(tmp_path, "r", encoding="utf-8") as f:
-                    docs = [Document(page_content=f.read())]
-            elif ext == ".csv":
-                loader = CSVLoader(str(tmp_path), encoding="utf-8")
-                docs = loader.load()
+                    text = f.read()
+                loader = None
+                docs = [Document(page_content=text, metadata={"file_name": up_file.name})]
             else:
-                st.warning(f"Tipo de archivo no soportado: {uploaded_file.name}")
+                st.warning(f"Tipo {ext} no soportado: {up_file.name}")
                 continue
 
-            # ───── 3. Añadir metadatos base ─────
-            for d in docs:
-                d.metadata.update(
-                    file_name=uploaded_file.name,
-                    original_ext=ext,
-                    page_number=d.metadata.get("page", None),
-                )
+            docs = loader.load() if loader else docs
 
-            # ───── 4. Chunking optimizado ─────
-            splitter = RecursiveCharacterTextSplitter(
-                chunk_size=750, chunk_overlap=100
-            )
+            # 3. Añadimos metadatos básicos
+            for d in docs:
+                d.metadata["file_name"] = up_file.name
+
+            # 4. Chunking
             chunks = splitter.split_documents(docs)
 
-            # ───── 5. Deduplicación simple ─────
-            unique_chunks = []
+            # 5. Hash + metadatos únicos
             for c in chunks:
-                c_hash = hashlib.sha1(c.page_content.encode()).hexdigest()
-                c.metadata["sha1"] = c_hash
-                # saltar si ya existe ese hash (rápida búsqueda)
-                if vectorstore.similarity_search(c_hash, k=1):
-                    continue
-                unique_chunks.append(c)
+                sha = hashlib.sha1(c.page_content.encode()).hexdigest()
+                c.metadata["sha1"] = sha
 
-            # ───── 6. Progreso visual ─────
-            progress_bar = st.progress(0.0, text=f"Vectorizando {uploaded_file.name}")
-            for idx, chunk in enumerate(unique_chunks, start=1):
-                vectorstore.add_documents([chunk])
-                progress_bar.progress(idx / len(unique_chunks))
-            progress_bar.empty()
+            # 6. Insertamos en vectorstore
+            vectorstore.add_documents(chunks)
+            total_chunks += len(chunks)
+            st.success(f"{up_file.name}: {len(chunks)} chunks cargados.")
 
-            st.success(f"✅ {uploaded_file.name} procesado: "
-                       f"{len(unique_chunks)} chunks añadidos.")
         except Exception as e:
-            st.error(f"Error procesando {uploaded_file.name}: {e}")
+            st.error(f"Error procesando {up_file.name}: {e}")
         finally:
-            tmp_path.unlink(missing_ok=True)
+            os.remove(tmp_path)  # limpiamos el temp file
 
+    st.info(f"Proceso completado. {total_chunks} chunks añadidos.")
 
 def vectorize_url(urls, vectorstore, lang_dict):
     if not vectorstore:
