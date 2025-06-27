@@ -94,50 +94,81 @@ def get_image_as_base64(path):
     except Exception:
         return ""
 
+import hashlib
+from langchain_community.document_loaders import PyPDFDirectoryLoader
+from langchain.schema import Document
+from tqdm import tqdm  # opcional (se ve sólo en logs)
+
 def vectorize_text(uploaded_files, vectorstore, lang_dict):
     if not vectorstore:
-        st.error(lang_dict.get('vectorstore_not_ready_admin', "Vectorstore not ready for upload."))
+        st.error(lang_dict.get('vectorstore_not_ready_admin',
+                               "Vectorstore not ready for upload."))
         return
-    with st.spinner("Processing files... This may take a moment."):
-        for uploaded_file in uploaded_files:
-            if uploaded_file is not None:
-                try:
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=Path(uploaded_file.name).suffix) as tmp_file:
-                        tmp_file.write(uploaded_file.getvalue())
-                        tmp_file_path = tmp_file.name
-                    
-                    loader_map = {
-                        '.pdf': PyPDFLoader,
-                        '.csv': lambda p: CSVLoader(p, encoding='utf-8'),
-                        '.txt': None # Caso especial
-                    }
-                    ext = Path(uploaded_file.name).suffix
-                    
-                    docs = []
-                    if ext in loader_map and loader_map[ext] is not None:
-                        loader = loader_map[ext](tmp_file_path)
-                        docs = loader.load()
-                    elif ext == '.txt':
-                        from langchain.schema import Document
-                        with open(tmp_file_path, 'r', encoding='utf-8') as f_txt:
-                            docs = [Document(page_content=f_txt.read())]
-                    else:
-                        st.warning(f"Unsupported file type: {uploaded_file.name}")
-                        continue
-                    
-                    for doc in docs:
-                        doc.metadata["source"] = uploaded_file.name
-                        
-                    if docs:
-                        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=150)
-                        pages = text_splitter.split_documents(docs)
-                        vectorstore.add_documents(pages)
-                        st.info(f"✅ {uploaded_file.name} processed ({len(pages)} segments).")
-                except Exception as e:
-                    st.error(f"Error processing file {uploaded_file.name}: {e}")
-                finally:
-                    if 'tmp_file_path' in locals() and os.path.exists(tmp_file_path):
-                        os.remove(tmp_file_path)
+
+    for uploaded_file in uploaded_files:
+        if uploaded_file is None:
+            continue
+
+        ext = Path(uploaded_file.name).suffix.lower()
+
+        # ───── 1. Guardar archivo temporal ─────
+        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp_file:
+            tmp_file.write(uploaded_file.getvalue())
+            tmp_path = Path(tmp_file.name)
+
+        try:
+            # ───── 2. Cargar documento según tipo ─────
+            if ext == ".pdf":
+                loader = PyPDFDirectoryLoader(str(tmp_path.parent))
+                docs = loader.load()  # obtiene 1 Document por página
+            elif ext == ".txt":
+                with open(tmp_path, "r", encoding="utf-8") as f:
+                    docs = [Document(page_content=f.read())]
+            elif ext == ".csv":
+                loader = CSVLoader(str(tmp_path), encoding="utf-8")
+                docs = loader.load()
+            else:
+                st.warning(f"Tipo de archivo no soportado: {uploaded_file.name}")
+                continue
+
+            # ───── 3. Añadir metadatos base ─────
+            for d in docs:
+                d.metadata.update(
+                    file_name=uploaded_file.name,
+                    original_ext=ext,
+                    page_number=d.metadata.get("page", None),
+                )
+
+            # ───── 4. Chunking optimizado ─────
+            splitter = RecursiveCharacterTextSplitter(
+                chunk_size=750, chunk_overlap=100
+            )
+            chunks = splitter.split_documents(docs)
+
+            # ───── 5. Deduplicación simple ─────
+            unique_chunks = []
+            for c in chunks:
+                c_hash = hashlib.sha1(c.page_content.encode()).hexdigest()
+                c.metadata["sha1"] = c_hash
+                # saltar si ya existe ese hash (rápida búsqueda)
+                if vectorstore.similarity_search(c_hash, k=1):
+                    continue
+                unique_chunks.append(c)
+
+            # ───── 6. Progreso visual ─────
+            progress_bar = st.progress(0.0, text=f"Vectorizando {uploaded_file.name}")
+            for idx, chunk in enumerate(unique_chunks, start=1):
+                vectorstore.add_documents([chunk])
+                progress_bar.progress(idx / len(unique_chunks))
+            progress_bar.empty()
+
+            st.success(f"✅ {uploaded_file.name} procesado: "
+                       f"{len(unique_chunks)} chunks añadidos.")
+        except Exception as e:
+            st.error(f"Error procesando {uploaded_file.name}: {e}")
+        finally:
+            tmp_path.unlink(missing_ok=True)
+
 
 def vectorize_url(urls, vectorstore, lang_dict):
     if not vectorstore:
