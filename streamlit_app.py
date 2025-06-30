@@ -513,13 +513,11 @@ if username != "demo":
                 st.info("No tienes permisos de administrador para cargar datos.")
         
         # Opciones de Prompt fuera de las pestañas pero en la sidebar
-        st.divider()
-        st.header("Personalidad del Asistente")
-        prompt_options = ('Short results', 'Extended results', 'Custom')
-        default_prompt_type = user_defaults.get("PROMPT_TYPE", 'Custom')
-        prompt_type = st.selectbox("Estilo de respuesta", prompt_options, index=prompt_options.index(default_prompt_type) if default_prompt_type in prompt_options else 2)
-        custom_prompt_text_val = get_custom_prompt(username)
-        custom_prompt = st.text_area(lang_dict.get('custom_prompt', "Custom Prompt"), value=custom_prompt_text_val, height=250, disabled=(prompt_type != 'Custom'))
+                st.divider()
+                st.header("Personalidad del Asistente")
+                st.caption("El asistente usa siempre el modo 'Extended results' (prompt fijo).")
+                prompt_type = "Extended results"   # forzamos estilo
+                custom_prompt = ""                 # no se utiliza
 
 else: # Si el usuario es 'demo'
     st.markdown("""<style>[data-testid="stSidebar"] {display: none}</style>""", unsafe_allow_html=True)
@@ -530,8 +528,8 @@ else: # Si el usuario es 'demo'
     disable_vector_store = False
     top_k_vectorstore = user_defaults.get("TOP_K_VECTORSTORE", 5)
     strategy = user_defaults.get("RAG_STRATEGY", 'Basic Retrieval')
-    prompt_type = user_defaults.get("PROMPT_TYPE", 'Custom')
-    custom_prompt = get_custom_prompt(username)
+    prompt_type = "Extended results"   # prompt fijo también para demo
+    custom_prompt = ""
 
 
 # Inicializar memoria
