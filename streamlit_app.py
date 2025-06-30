@@ -104,8 +104,8 @@ def vectorize_text(uploaded_files, vectorstore, lang_dict):
         return
 
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=250,
+        chunk_size=400,
+        chunk_overlap=80,
         separators=["\n\n", "\n", ".", ";", " "],
     )
 
@@ -293,30 +293,49 @@ Pregunta:
         )
 
 
-from langchain.retrievers import ContextualCompressionRetriever
-from langchain.retrievers.document_compressors import LLMChainExtractor
+from collections import defaultdict
 
-def load_retriever(vectorstore, model, top_k_vectorstore):
+@st.cache_resource(show_spinner="Creando retriever...")
+def load_retriever(vectorstore, top_k):
     """
-    Crea (o reutiliza) un retriever MMR + compresión LLM, guardándolo en
-    st.session_state para evitar recrearlo en cada consulta.
+    Devuelve una función `fused(query)` que combina:
+      • Similitud clásica
+      • MMR
+      • Coincidencia BM25 (similarity_search)
+    y aplica Reciprocal Rank Fusion para aumentar la cobertura.
     """
-    key = f"retriever_{top_k_vectorstore}"
-    if key in st.session_state:
-        return st.session_state[key]
+    # 1) Retriever de similitud “normal”
+    retr_sim = vectorstore.as_retriever(search_kwargs={"k": top_k})
 
-    base_retriever = vectorstore.as_retriever(
+    # 2) Retriever Max Marginal Relevance
+    retr_mmr = vectorstore.as_retriever(
         search_type="mmr",
-        search_kwargs={"k": top_k_vectorstore},
+        search_kwargs={"k": top_k}
     )
-    compressor = LLMChainExtractor.from_llm(model)
 
-    retriever = ContextualCompressionRetriever(
-        base_compressor=compressor,
-        base_retriever=base_retriever,
-    )
-    st.session_state[key] = retriever
-    return retriever
+    # 3) Función BM25 clásica
+    def retr_bm25(q: str):
+        return vectorstore.similarity_search(q, k=top_k)
+
+    # --- reciprocol-rank-fusion sencillo ----------------------------
+    def rrf(lists, k=60):
+        scores = defaultdict(float)
+        for docs in lists:
+            for rank, doc in enumerate(docs):
+                scores[doc] += 1 / (rank + 1)      # 1/(rank+1) suele bastar
+        # Devuelve ordenados por suma de scores
+        return [d for d, _ in sorted(scores.items(),
+                                     key=lambda x: x[1],
+                                     reverse=True)][:top_k]
+
+    # --- función final que usaremos en la app -----------------------
+    def fused(query: str):
+        docs_sim  = retr_sim.get_relevant_documents(query)
+        docs_mmr  = retr_mmr.get_relevant_documents(query)
+        docs_bm25 = retr_bm25(query)
+        return rrf([docs_sim, docs_mmr, docs_bm25], k=top_k)
+
+    return fused  # <- se retorna la función
     
 def generate_queries(model, language):
     prompt = f"""You are a helpful assistant that generates multiple search queries based on a single input query in language {language}.
@@ -643,8 +662,8 @@ with st.chat_message("assistant", avatar="🤖"):
     # ───────── Recuperamos los documentos relevantes ─────────
     relevant_documents = []
     if not disable_vector_store:
-        retriever = load_retriever(vectorstore, model, top_k_vectorstore)
-        relevant_documents = retriever.get_relevant_documents(query=question)
+        retriever = load_retriever(vectorstore, top_k_vectorstore)
+        relevant_documents = retriever(question)   # ahora retriever es una función
 
     # ────────── Bloque de depuración: mostrar chunks ──────────
     if not disable_vector_store:
