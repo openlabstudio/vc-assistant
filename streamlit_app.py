@@ -220,38 +220,37 @@ def get_prompt(type_param, custom_prompt, language):
     # ---------------------- Extended results ----------------------
     if type_param == "Extended results":
         system_prompt = """### ROL Y PERSONALIDAD ###
-        Actúa como un Analista Estratégico Senior especializado en la intersección de Inteligencia Artificial, Venture Capital y Private Equity. Tu nombre es "Asistente Experto IA". Tu tono es profesional, analítico y basado en datos. Te diriges a un usuario experto que valora las respuestas concisas pero profundas.
+    Actúa como un Analista Estratégico Senior especializado en la intersección de Inteligencia Artificial, Venture Capital y Private Equity. Tu nombre es "Asistente Experto IA". Tu tono es profesional, analítico y basado en datos. Te diriges a un usuario experto que valora respuestas concisas pero profundas.
 
-        ### DIRECTIVA PRINCIPAL ###
-        Tu única función es responder a las preguntas del usuario utilizando EXCLUSIVAMENTE la información proporcionada en la sección 'Contexto'. No inventes nada. Si no hay suficiente información, reconoce las limitaciones.
+    ### DIRECTIVA PRINCIPAL ###
+    Tu única función es responder a las preguntas del usuario utilizando EXCLUSIVAMENTE la información proporcionada en la sección 'Contexto'. No inventes. Si no hay suficiente información, reconoce las limitaciones.
 
-        ### REGLAS FUNDAMENTALES (NO MODIFICABLES) ###
-        1. **CERO ALUCINACIONES**  
-        2. **SIN CONOCIMIENTO EXTERNO**  
-        3. **USO DEL HISTORIAL** si aporta contexto útil  
-        4. **FOCO EN APORTAR VALOR con estructura y claridad**
+    ### REGLAS FUNDAMENTALES (NO MODIFICABLES) ###
+    1. ❌ No alucines  
+    2. ❌ No uses conocimiento externo  
+    3. ✅ Usa el historial si aporta contexto  
+    4. ✅ Extrae valor y evita vaguedades  
 
-        ### ESTILO Y ESTRUCTURA DE LA RESPUESTA ###
-        - Siempre empieza con una introducción de 1–2 frases que sintetice el mensaje principal.
-        - Cuando el tema lo permita, organiza la respuesta en bloques temáticos con títulos o emojis, por ejemplo:
-          - ✅ 1. Casos destacados
-          - 📊 2. Impacto cuantificable
-          - ⚠️ 3. Retos identificados
-        - Usa listas con viñetas si ayudan a la claridad.
-        - Si hay datos, casos o nombres propios, destácalos con precisión.
-        - Evita generalizaciones vagas. Sé específico.
+    ### ESTILO Y ESTRUCTURA ADAPTATIVA ###
+    - Comienza siempre con una **introducción de 1–2 frases** que anticipe lo más importante.
+    - Luego adapta la respuesta en función del tipo de pregunta:
+      - Si es un análisis comparativo o de casos → usa **bloques con títulos** (ej. "✅ 1. EQT Ventures – Motherbrain").
+      - Si es conceptual o técnico → usa **viñetas o pasos secuenciales**.
+      - Si es una decisión o estrategia → ofrece pros/contras o alternativas claras.
+    - Resalta nombres propios, cifras o impactos tangibles si están presentes.
+    - Si hay limitaciones en el contexto, **reconócelas con claridad**.
 
-        ---
-        **Contexto Relevante de los Documentos:**  
-        {context}
+    ---
+    **Contexto Relevante de los Documentos:**  
+    {context}
 
-        **Historial de Chat:**  
-        {chat_history}
+    **Historial de Chat:**  
+    {chat_history}
 
-        **Pregunta del Usuario:**  
-        {question}
+    **Pregunta del Usuario:**  
+    {question}
 
-        **Respuesta del Asistente Experto IA:**"""
+    **Respuesta del Asistente Experto IA:**"""
 
         return ChatPromptTemplate.from_messages(
             [
@@ -294,9 +293,27 @@ Pregunta:
         )
 
 
-def load_retriever(vectorstore, top_k_vectorstore):
-    print(f"""load_retriever with top_k_vectorstore='{top_k_vectorstore}'""")
-    return vectorstore.as_retriever(search_kwargs={"k": top_k_vectorstore})
+from langchain.retrievers import ContextualCompressionRetriever
+from langchain.retrievers.document_compressors import LLMChainExtractor
+
+@st.cache_resource(show_spinner="Creando retriever...")
+def load_retriever(vectorstore, model, top_k_vectorstore):
+    print(f"load_retriever (compressor) con top_k_vectorstore={top_k_vectorstore}")
+
+    # Paso 1: Recuperador base usando MMR
+    base_retriever = vectorstore.as_retriever(
+        search_type="mmr",
+        search_kwargs={"k": top_k_vectorstore}
+    )
+
+    # Paso 2: Comprimimos los documentos para que entren más chunks
+    compressor = LLMChainExtractor.from_llm(model)
+
+    # Paso 3: Devolvemos el retriever comprimido
+    return ContextualCompressionRetriever(
+        base_compressor=compressor,
+        base_retriever=base_retriever
+    )
 
 def generate_queries(model, language):
     prompt = f"""You are a helpful assistant that generates multiple search queries based on a single input query in language {language}.
@@ -625,15 +642,8 @@ with st.chat_message("assistant", avatar="🤖"):
     # ───────── Recuperamos los documentos relevantes ─────────
     relevant_documents = []
     if not disable_vector_store:
-        if strategy == "Maximal Marginal Relevance":
-            relevant_documents = vectorstore.max_marginal_relevance_search(
-                query=question, k=top_k_vectorstore
-            )
-        else:
-            retriever = vectorstore.as_retriever(
-                search_kwargs={"k": top_k_vectorstore}
-            )
-            relevant_documents = retriever.get_relevant_documents(query=question)
+        retriever = load_retriever(vectorstore, model, top_k_vectorstore)
+        relevant_documents = retriever.get_relevant_documents(query=question)
 
     # ────────── Bloque de depuración: mostrar chunks ──────────
     if not disable_vector_store:
