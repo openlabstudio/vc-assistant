@@ -295,7 +295,6 @@ Pregunta:
 
 from collections import defaultdict
 
-@st.cache_resource(show_spinner="Creando retriever...")
 def load_retriever(vectorstore, top_k):
     """
     Devuelve una función `fused(query)` que combina:
