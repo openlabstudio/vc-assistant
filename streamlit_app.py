@@ -104,9 +104,9 @@ def vectorize_text(uploaded_files, vectorstore, lang_dict):
         return
 
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1500,
-        chunk_overlap=200,
-        separators=["\n\n", "\n", ".", " "],
+        chunk_size=1000,
+        chunk_overlap=250,
+        separators=["\n\n", "\n", ".", ";", " "],
     )
 
     total_chunks = 0
