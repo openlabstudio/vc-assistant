@@ -319,13 +319,17 @@ def load_retriever(vectorstore, top_k):
     # --- reciprocol-rank-fusion sencillo ----------------------------
     def rrf(lists, k=60):
         scores = defaultdict(float)
+        doc_map = {}
+
         for docs in lists:
             for rank, doc in enumerate(docs):
-                scores[doc] += 1 / (rank + 1)      # 1/(rank+1) suele bastar
-        # Devuelve ordenados por suma de scores
-        return [d for d, _ in sorted(scores.items(),
-                                     key=lambda x: x[1],
-                                     reverse=True)][:top_k]
+                key = doc.page_content
+                scores[key] += 1 / (rank + 1)
+                doc_map[key] = doc  # Guarda el objeto Document completo
+
+        # Ordena por puntuación y devuelve los Document
+        top_docs = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:k]
+        return [doc_map[content] for content, _ in top_docs]
 
     # --- función final que usaremos en la app -----------------------
     def fused(query: str):
