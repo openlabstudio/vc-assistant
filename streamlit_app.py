@@ -298,18 +298,15 @@ from langchain.retrievers.document_compressors import LLMChainExtractor
 
 @st.cache_resource(show_spinner="Creando retriever...")
 def load_retriever(vectorstore, model, top_k_vectorstore):
-    print(f"load_retriever (compressor) con top_k_vectorstore={top_k_vectorstore}")
+    from langchain.retrievers import ContextualCompressionRetriever
+    from langchain.retrievers.document_compressors import LLMChainExtractor
 
-    # Paso 1: Recuperador base usando MMR
     base_retriever = vectorstore.as_retriever(
         search_type="mmr",
         search_kwargs={"k": top_k_vectorstore}
     )
-
-    # Paso 2: Comprimimos los documentos para que entren más chunks
     compressor = LLMChainExtractor.from_llm(model)
 
-    # Paso 3: Devolvemos el retriever comprimido
     return ContextualCompressionRetriever(
         base_compressor=compressor,
         base_retriever=base_retriever
