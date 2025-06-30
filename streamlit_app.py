@@ -296,22 +296,28 @@ Pregunta:
 from langchain.retrievers import ContextualCompressionRetriever
 from langchain.retrievers.document_compressors import LLMChainExtractor
 
-@st.cache_resource(show_spinner="Creando retriever...")
 def load_retriever(vectorstore, model, top_k_vectorstore):
-    from langchain.retrievers import ContextualCompressionRetriever
-    from langchain.retrievers.document_compressors import LLMChainExtractor
+    """
+    Crea (o reutiliza) un retriever MMR + compresión LLM, guardándolo en
+    st.session_state para evitar recrearlo en cada consulta.
+    """
+    key = f"retriever_{top_k_vectorstore}"
+    if key in st.session_state:
+        return st.session_state[key]
 
     base_retriever = vectorstore.as_retriever(
         search_type="mmr",
-        search_kwargs={"k": top_k_vectorstore}
+        search_kwargs={"k": top_k_vectorstore},
     )
     compressor = LLMChainExtractor.from_llm(model)
 
-    return ContextualCompressionRetriever(
+    retriever = ContextualCompressionRetriever(
         base_compressor=compressor,
-        base_retriever=base_retriever
+        base_retriever=base_retriever,
     )
-
+    st.session_state[key] = retriever
+    return retriever
+    
 def generate_queries(model, language):
     prompt = f"""You are a helpful assistant that generates multiple search queries based on a single input query in language {language}.
 Generate multiple search queries related to: {{original_query}}
