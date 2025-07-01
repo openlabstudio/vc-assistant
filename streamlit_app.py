@@ -104,7 +104,7 @@ def vectorize_text(uploaded_files, vectorstore, lang_dict):
         return
 
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=400,
+        chunk_size=600,
         chunk_overlap=80,
         separators=["\n\n", "\n", ".", ";", " "],
     )
@@ -230,6 +230,8 @@ def get_prompt(type_param, custom_prompt, language):
     2. ❌ No uses conocimiento externo  
     3. ✅ Usa el historial si aporta contexto  
     4. ✅ Extrae valor y evita vaguedades  
+    5. Si el ‘Contexto’ contiene MÚLTIPLES casos o ejemplos, incluye **todos los que aparezcan**, resumiendo cada uno en 3-4 bullets con datos cuantificables.
+
 
     ### ESTILO Y ESTRUCTURA ADAPTATIVA ###
     - Comienza siempre con una **introducción de 1–2 frases** que anticipe lo más importante.
