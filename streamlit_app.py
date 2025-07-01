@@ -294,31 +294,30 @@ Pregunta:
             ]
         )
 
-
+from langchain.retrievers.multi_query import MultiQueryRetriever
 from collections import defaultdict
+from langchain.schema.document import Document
 
-def load_retriever(vectorstore, top_k):
+def load_retriever(vectorstore, llm, top_k):
     """
     Devuelve una función `fused(query)` que combina:
-      • Similitud clásica
-      • MMR
-      • Coincidencia BM25 (similarity_search)
-    y aplica Reciprocal Rank Fusion para aumentar la cobertura.
+      • Recuperación multiconsulta generada con LLM
+      • Coincidencia BM25 clásica
+    y aplica Reciprocal Rank Fusion (RRF) para mejorar cobertura y precisión.
     """
-    # 1) Retriever de similitud “normal”
-    retr_sim = vectorstore.as_retriever(search_kwargs={"k": top_k})
 
-    # 2) Retriever Max Marginal Relevance
-    retr_mmr = vectorstore.as_retriever(
-        search_type="mmr",
-        search_kwargs={"k": top_k}
+    # MultiQueryRetriever genera variantes de la pregunta para mejor cobertura
+    retriever_mqr = MultiQueryRetriever.from_llm(
+        retriever=vectorstore.as_retriever(search_kwargs={"k": top_k}),
+        llm=llm,
+        prompt="Reescribe esta pregunta de tres formas distintas para mejorar la búsqueda en español e inglés:"
     )
 
-    # 3) Función BM25 clásica
-    def retr_bm25(q: str):
-        return vectorstore.similarity_search(q, k=top_k)
+    # BM25 clásico
+    def retr_bm25(query: str):
+        return vectorstore.similarity_search(query, k=top_k)
 
-    # --- reciprocol-rank-fusion sencillo ----------------------------
+    # RRF: fusiona resultados dando prioridad a la posición en cada lista
     def rrf(lists, k=60):
         scores = defaultdict(float)
         doc_map = {}
@@ -327,20 +326,18 @@ def load_retriever(vectorstore, top_k):
             for rank, doc in enumerate(docs):
                 key = doc.page_content
                 scores[key] += 1 / (rank + 1)
-                doc_map[key] = doc  # Guarda el objeto Document completo
+                doc_map[key] = doc
 
-        # Ordena por puntuación y devuelve los Document
         top_docs = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:k]
         return [doc_map[content] for content, _ in top_docs]
 
-    # --- función final que usaremos en la app -----------------------
+    # Función final que recibe la pregunta del usuario
     def fused(query: str):
-        docs_sim  = retr_sim.get_relevant_documents(query)
-        docs_mmr  = retr_mmr.get_relevant_documents(query)
+        docs_mqr = retriever_mqr.get_relevant_documents(query)
         docs_bm25 = retr_bm25(query)
-        return rrf([docs_sim, docs_mmr, docs_bm25], k=top_k)
+        return rrf([docs_mqr, docs_bm25], k=top_k)
 
-    return fused  # <- se retorna la función
+    return fused
     
 def generate_queries(model, language):
     prompt = f"""You are a helpful assistant that generates multiple search queries based on a single input query in language {language}.
