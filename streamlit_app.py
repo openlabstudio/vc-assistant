@@ -664,7 +664,7 @@ with st.chat_message("assistant", avatar="🤖"):
     # ───────── Recuperamos los documentos relevantes ─────────
     relevant_documents = []
     if not disable_vector_store:
-        retriever = load_retriever(vectorstore, top_k_vectorstore)
+        retriever = load_retriever(vectorstore, model, top_k_vectorstore)
         relevant_documents = retriever(question)   # ahora retriever es una función
 
     # ────────── Bloque de depuración: mostrar chunks ──────────
