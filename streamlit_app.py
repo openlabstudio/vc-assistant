@@ -557,17 +557,7 @@ if username != "demo":
                 prompt_type = "Extended results"   # forzamos estilo
                 custom_prompt = ""                 # no se utiliza
 
-else:  # Si el usuario es 'demo'
-    # Mostramos una sidebar simplificada sin opciones de carga, pero sí con chunks
-    with st.sidebar:
-        st.markdown(f""":orange[Usuario: {username}]""")
-        st.divider()
-        st.header("Modo DEMO Activo")
-        st.caption("Este modo te permite probar el asistente con documentos ya cargados.")
-        st.divider()
-        st.markdown("Los documentos cargados serán visibles tras hacer una pregunta.")
-        st.divider()
-
+else:  # Si el usuario es 'demo', se oculta la barra lateral y se carga configuración básica
     user_defaults = st.secrets.get("DEFAULT_SETTINGS", {}).get(username, {})
     disable_chat_history = True
     top_k_history = 0
@@ -576,7 +566,6 @@ else:  # Si el usuario es 'demo'
     strategy = user_defaults.get("RAG_STRATEGY", 'Basic Retrieval')
     prompt_type = "Extended results"
     custom_prompt = ""
-
 
 # Inicializar memoria
 memory = load_memory_rc(chat_history, top_k_history if not disable_chat_history else 0) if chat_history else None
@@ -696,10 +685,10 @@ with st.chat_message("assistant", avatar="🤖"):
         )
 
         # 🔎 Mostrar contenido de los documentos recuperados (debug visual)
-        with st.expander("🧠 Documentos recuperados (debug)", expanded=False):
-            for i, doc in enumerate(relevant_documents, start=1):
-                st.markdown(f"**Documento #{i}:**")
-                st.code(doc.page_content[:1000])
+    #    with st.expander("🧠 Documentos recuperados (debug)", expanded=False):
+    #        for i, doc in enumerate(relevant_documents, start=1):
+    #            st.markdown(f"**Documento #{i}:**")
+    #            st.code(doc.page_content[:1000])
 
 
     # ────────── Bloque de depuración: mostrar chunks ──────────
