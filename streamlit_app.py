@@ -714,16 +714,16 @@ with st.chat_message("assistant", avatar="🤖"):
 
 # 🔍 DEBUG: muestra el prompt generado antes de invocar
     if hasattr(current_prompt_obj, 'format'):
-    try:
-        formatted_prompt = current_prompt_obj.format(
-            context="\n\n".join([doc.page_content for doc in relevant_documents]),
-            chat_history=history,
-            question=question
-        )
-        st.info("Prompt generado (primeros 1000 caracteres):")
-        st.code(formatted_prompt[:1000])
-    except Exception as e:
-        st.warning(f"No se pudo mostrar el prompt generado: {e}")
+        try:
+            formatted_prompt = current_prompt_obj.format(
+                context="\n\n".join([doc.page_content for doc in relevant_documents]),
+                chat_history=history,
+                question=question
+            )
+            st.info("Prompt generado (primeros 1000 caracteres):")
+            st.code(formatted_prompt[:1000])
+        except Exception as e:
+            st.warning(f"No se pudo mostrar el prompt generado: {e}")
 
 # ────────── Ejecutamos el chain con streaming ──────────
     
