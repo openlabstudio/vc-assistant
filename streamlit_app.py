@@ -294,31 +294,33 @@ Pregunta:
             ]
         )
 
-from langchain.retrievers.multi_query import MultiQueryRetriever
 from collections import defaultdict
-from langchain.schema.document import Document
+from langchain.retrievers import MultiQueryRetriever
+from langchain.chains import LLMChain
+from langchain.prompts import PromptTemplate
 
 def load_retriever(vectorstore, llm, top_k):
     """
-    Devuelve una función `fused(query)` que combina:
-      • Recuperación multiconsulta generada con LLM
-      • Coincidencia BM25 clásica
-    y aplica Reciprocal Rank Fusion (RRF) para mejorar cobertura y precisión.
+    Crea un retriever que genera múltiples reformulaciones de la pregunta (MultiQueryRetriever),
+    ejecuta búsquedas múltiples y combina los resultados con RRF.
     """
 
-    # MultiQueryRetriever genera variantes de la pregunta para mejor cobertura
-    retriever_mqr = MultiQueryRetriever.from_llm(
+    # 1. Prompt explícito para reformular preguntas
+    query_prompt = PromptTemplate.from_template(
+        "Dada la siguiente pregunta de un analista especializado en IA y Venture Capital, "
+        "genera 3 reformulaciones distintas que puedan recuperar información complementaria.\n"
+        "Pregunta original: {question}"
+    )
+    llm_chain = LLMChain(llm=llm, prompt=query_prompt)
+
+    # 2. MultiQueryRetriever con LLMChain en vez de .from_llm
+    retriever_mqr = MultiQueryRetriever(
         retriever=vectorstore.as_retriever(search_kwargs={"k": top_k}),
-        llm=llm,
-        prompt="Reescribe esta pregunta de tres formas distintas para mejorar la búsqueda en español e inglés:"
+        llm_chain=llm_chain
     )
 
-    # BM25 clásico
-    def retr_bm25(query: str):
-        return vectorstore.similarity_search(query, k=top_k)
-
-    # RRF: fusiona resultados dando prioridad a la posición en cada lista
-    def rrf(lists, k=60):
+    # 3. Función de fusión por puntuación recíproca
+    def rrf(lists, k=top_k):
         scores = defaultdict(float)
         doc_map = {}
 
@@ -331,11 +333,12 @@ def load_retriever(vectorstore, llm, top_k):
         top_docs = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:k]
         return [doc_map[content] for content, _ in top_docs]
 
-    # Función final que recibe la pregunta del usuario
+    # 4. Función final que mezcla MQR + BM25 + MMR
     def fused(query: str):
         docs_mqr = retriever_mqr.get_relevant_documents(query)
-        docs_bm25 = retr_bm25(query)
-        return rrf([docs_mqr, docs_bm25], k=top_k)
+        docs_bm25 = vectorstore.similarity_search(query, k=top_k)
+        docs_mmr = vectorstore.as_retriever(search_type="mmr", search_kwargs={"k": top_k}).get_relevant_documents(query)
+        return rrf([docs_mqr, docs_bm25, docs_mmr], k=top_k)
 
     return fused
     
