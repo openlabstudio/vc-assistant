@@ -454,7 +454,8 @@ def load_chat_history_rc(username, session_id):
 
 @st.cache_resource(show_spinner="Cargando modelo de lenguaje...")
 def load_model_rc():
-    return ChatOpenAI(temperature=0.3, model='gpt-4o', streaming=True, verbose=False)
+    return ChatOpenAI(temperature=0.3, model='gpt-4o', streaming=False, verbose=False)
+
 
 @st.cache_resource()
 def load_memory_rc(_chat_history, top_k_history):
@@ -711,7 +712,21 @@ with st.chat_message("assistant", avatar="🤖"):
     current_prompt_obj = get_prompt(prompt_type, custom_prompt, language)
     chain = RunnableMap(rag_chain_inputs) | current_prompt_obj | model
 
-    # ────────── Ejecutamos el chain con streaming ──────────
+# 🔍 DEBUG: muestra el prompt generado antes de invocar
+    if hasattr(current_prompt_obj, 'format'):
+        try:
+           formatted_prompt = current_prompt_obj.format(
+              context="\n\n".join([doc.page_content for doc in relevant_documents]),
+                chat_history=history,
+                question=question
+            )
+            st.info("Prompt generado (primeros 1000 caracteres):")
+            st.code(formatted_prompt[:1000])
+        except Exception as e:
+            st.warning(f"No se pudo mostrar el prompt generado: {e}")
+
+# ────────── Ejecutamos el chain con streaming ──────────
+    
     try:
         response = chain.invoke(
             {
