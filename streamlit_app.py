@@ -705,12 +705,13 @@ with st.chat_message("assistant", avatar="🤖"):
 
 
     # ────────── Bloque de depuración: mostrar chunks ──────────
-    if not disable_vector_store:
-        with st.sidebar.expander("📝 Chunks recuperados", expanded=False):
-            for i, doc in enumerate(relevant_documents, start=1):
-                src = doc.metadata.get("source", "sin_fuente")
-                preview = doc.page_content[:200].replace("\n", " ")
-                st.markdown(f"**{i}. {src}**  \n{preview}…")
+
+    if username != "demo" and not disable_vector_store:
+    with st.sidebar.expander("📝 Chunks recuperados", expanded=False):
+        for i, doc in enumerate(relevant_documents, start=1):
+            src = doc.metadata.get("source", "sin_fuente")
+            preview = doc.page_content[:200].replace("\n", " ")
+            st.markdown(f"**{i}. {src}**  \n{preview}…")
 
     # ────────── Preparamos memoria y prompt ──────────
     memory = load_memory_rc(
@@ -733,7 +734,7 @@ with st.chat_message("assistant", avatar="🤖"):
     chain = RunnableMap(rag_chain_inputs) | current_prompt_obj | model
 
 # 🔍 DEBUG: muestra el prompt generado antes de invocar
-    if hasattr(current_prompt_obj, 'format'):
+    if username != "demo" and hasattr(current_prompt_obj, 'format'):
         try:
             formatted_prompt = current_prompt_obj.format(
                 context="\n\n".join([doc.page_content for doc in relevant_documents]),
@@ -761,10 +762,6 @@ with st.chat_message("assistant", avatar="🤖"):
         # Guardamos en memoria
         if memory:
             memory.save_context({"question": question}, {"answer": final_content})
-
-        # ✅ Marca que ya hubo al menos una pregunta (solo la primera vez)
-        if "last_question" not in st.session_state:
-            st.session_state["last_question"] = question
 
         # Añadimos al historial visible
         st.session_state.messages.append(AIMessage(content=final_content))
