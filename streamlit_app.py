@@ -557,15 +557,7 @@ if username != "demo":
                 prompt_type = "Extended results"   # forzamos estilo
                 custom_prompt = ""                 # no se utiliza
 
-else:  # Si el usuario es 'demo', se oculta la barra lateral y se carga configuración básica
-    user_defaults = st.secrets.get("DEFAULT_SETTINGS", {}).get(username, {})
-    disable_chat_history = True
-    top_k_history = 0
-    disable_vector_store = False
-    top_k_vectorstore = user_defaults.get("TOP_K_VECTORSTORE", 5)
-    strategy = user_defaults.get("RAG_STRATEGY", 'Basic Retrieval')
-    prompt_type = "Extended results"
-    custom_prompt = ""
+
 
 # Inicializar memoria
 memory = load_memory_rc(chat_history, top_k_history if not disable_chat_history else 0) if chat_history else None
