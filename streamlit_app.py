@@ -474,8 +474,15 @@ if not check_password():
 username = st.session_state.user
 language = st.secrets.get("languages", {}).get(username, "es_ES")
 lang_dict = load_localization(language)
+# Carga de configuración por defecto del usuario (o valores seguros si faltan)
 user_defaults = st.secrets.get("DEFAULT_SETTINGS", {}).get(username, {})
-
+disable_chat_history = user_defaults.get("DISABLE_CHAT_HISTORY", True)
+top_k_history = user_defaults.get("TOP_K_HISTORY", 0)
+disable_vector_store = user_defaults.get("DISABLE_VECTOR_STORE", False)
+top_k_vectorstore = user_defaults.get("TOP_K_VECTORSTORE", 5)
+strategy = user_defaults.get("RAG_STRATEGY", "Basic Retrieval")
+prompt_type = user_defaults.get("PROMPT_TYPE", "Extended results")
+custom_prompt = user_defaults.get("CUSTOM_PROMPT", "")
 embedding = load_embedding_rc()
 vectorstore = load_vectorstore_rc(embedding) if embedding else None
 chat_history = load_chat_history_rc(username, st.session_state.session_id) if vectorstore else None
