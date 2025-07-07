@@ -557,16 +557,24 @@ if username != "demo":
                 prompt_type = "Extended results"   # forzamos estilo
                 custom_prompt = ""                 # no se utiliza
 
-else: # Si el usuario es 'demo'
-    st.markdown("""<style>[data-testid="stSidebar"] {display: none}</style>""", unsafe_allow_html=True)
-    # Definimos aquí los parámetros para el usuario 'demo'. Más limpio.
+else:  # Si el usuario es 'demo'
+    # Mostramos una sidebar simplificada sin opciones de carga, pero sí con chunks
+    with st.sidebar:
+        st.markdown(f""":orange[Usuario: {username}]""")
+        st.divider()
+        st.header("Modo DEMO Activo")
+        st.caption("Este modo te permite probar el asistente con documentos ya cargados.")
+        st.divider()
+        st.markdown("Los documentos cargados serán visibles tras hacer una pregunta.")
+        st.divider()
+
     user_defaults = st.secrets.get("DEFAULT_SETTINGS", {}).get(username, {})
     disable_chat_history = True
     top_k_history = 0
     disable_vector_store = False
     top_k_vectorstore = user_defaults.get("TOP_K_VECTORSTORE", 5)
     strategy = user_defaults.get("RAG_STRATEGY", 'Basic Retrieval')
-    prompt_type = "Extended results"   # prompt fijo también para demo
+    prompt_type = "Extended results"
     custom_prompt = ""
 
 
@@ -679,10 +687,20 @@ with st.chat_message("assistant", avatar="🤖"):
         st.stop()
 
     # ───────── Recuperamos los documentos relevantes ─────────
+
     relevant_documents = []
     if not disable_vector_store:
-        retriever = load_retriever(vectorstore, top_k_vectorstore, st.secrets["OPENAI_API_KEY"])
-        relevant_documents = retriever(question)   # ahora retriever es una función
+    # 1. similaridad coseno pura, k=25 (slider)
+        relevant_documents = vectorstore.similarity_search(
+        question, k=top_k_vectorstore
+        )
+
+        # 🔎 Mostrar contenido de los documentos recuperados (debug visual)
+        with st.expander("🧠 Documentos recuperados (debug)", expanded=False):
+            for i, doc in enumerate(relevant_documents, start=1):
+                st.markdown(f"**Documento #{i}:**")
+                st.code(doc.page_content[:1000])
+
 
     # ────────── Bloque de depuración: mostrar chunks ──────────
     if not disable_vector_store:
