@@ -27,6 +27,18 @@ import openai
 # --- CONFIGURACIÓN DE PÁGINA (DEBE SER LO PRIMERO) ---
 st.set_page_config(page_title=" ", page_icon='./customizations/logo/anim-logo-1fps-verde.gif', layout="wide")
 
+if username == "demo" and "last_question" not in st.session_state:
+    st.markdown(
+        """
+        <style>
+        [data-testid="stSidebar"] {
+            display: none;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
 # --- INICIALIZACIÓN DE SESSION STATE (ÚNICA Y CORRECTA) ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
