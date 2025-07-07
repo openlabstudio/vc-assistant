@@ -707,11 +707,11 @@ with st.chat_message("assistant", avatar="🤖"):
     # ────────── Bloque de depuración: mostrar chunks ──────────
 
     if username != "demo" and not disable_vector_store:
-    with st.sidebar.expander("📝 Chunks recuperados", expanded=False):
-        for i, doc in enumerate(relevant_documents, start=1):
-            src = doc.metadata.get("source", "sin_fuente")
-            preview = doc.page_content[:200].replace("\n", " ")
-            st.markdown(f"**{i}. {src}**  \n{preview}…")
+        with st.sidebar.expander("📝 Chunks recuperados", expanded=False):
+            for i, doc in enumerate(relevant_documents, start=1):
+                src = doc.metadata.get("source", "sin_fuente")
+                preview = doc.page_content[:200].replace("\n", " ")
+                st.markdown(f"**{i}. {src}**  \n{preview}…")
 
     # ────────── Preparamos memoria y prompt ──────────
     memory = load_memory_rc(
