@@ -298,47 +298,60 @@ from collections import defaultdict
 from langchain.retrievers import MultiQueryRetriever
 from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate
+from langchain_openai import ChatOpenAI   # ← “mini-LLM” SIN streaming
 
-def load_retriever(vectorstore, llm, top_k):
+def load_retriever(vectorstore, top_k, api_key):
     """
-    Crea un retriever que genera múltiples reformulaciones de la pregunta (MultiQueryRetriever),
-    ejecuta búsquedas múltiples y combina los resultados con RRF.
+    1) Genera 3 reformulaciones de la pregunta (MultiQueryRetriever + LLMChain)
+    2) Recupera con similitud, MMR y BM25
+    3) Fusiona con Reciprocal-Rank-Fusion (RRF)
+    Devuelve una función `fused(query)` lista para usar.
     """
 
-    # 1. Prompt explícito para reformular preguntas
-    query_prompt = PromptTemplate.from_template(
-        "Dada la siguiente pregunta de un analista especializado en IA y Venture Capital, "
-        "genera 3 reformulaciones distintas que puedan recuperar información complementaria.\n"
-        "Pregunta original: {question}"
+    # --- 1. LLM dedicado al retriever (sin streaming) ------------------------
+    mqr_llm = ChatOpenAI(
+        temperature=0.0,
+        model="gpt-4o",
+        streaming=False,          # ← ¡IMPORTANTE!
+        openai_api_key=api_key
     )
-    llm_chain = LLMChain(llm=llm, prompt=query_prompt)
 
-    # 2. MultiQueryRetriever con LLMChain en vez de .from_llm
+    # Prompt para reformular la consulta
+    query_prompt = PromptTemplate.from_template(
+        "Dada la pregunta de un analista de IA & Venture Capital, "
+        "genera 3 reformulaciones distintas para recuperar información complementaria.\n"
+        "Pregunta: {question}"
+    )
+    llm_chain = LLMChain(llm=mqr_llm, prompt=query_prompt)
+
+    # Multi-query retriever
     retriever_mqr = MultiQueryRetriever(
         retriever=vectorstore.as_retriever(search_kwargs={"k": top_k}),
         llm_chain=llm_chain
     )
 
-    # 3. Función de fusión por puntuación recíproca
-    def rrf(lists, k=top_k):
-        scores = defaultdict(float)
-        doc_map = {}
+    # --- 2. Otros dos retrievers --------------------------------------------
+    retr_sim  = vectorstore.as_retriever(search_kwargs={"k": top_k})                     # similitud
+    retr_mmr  = vectorstore.as_retriever(search_type="mmr", search_kwargs={"k": top_k}) # MMR
 
+    # --- 3. Fusión RRF -------------------------------------------------------
+    def rrf(lists, k=top_k):
+        scores, doc_map = defaultdict(float), {}
         for docs in lists:
             for rank, doc in enumerate(docs):
                 key = doc.page_content
-                scores[key] += 1 / (rank + 1)
+                scores[key] += 1 / (rank + 1)   # 1/(rank+1)
                 doc_map[key] = doc
-
         top_docs = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:k]
-        return [doc_map[content] for content, _ in top_docs]
+        return [doc_map[c] for c, _ in top_docs]
 
-    # 4. Función final que mezcla MQR + BM25 + MMR
+    # --- 4. Función final ----------------------------------------------------
     def fused(query: str):
-        docs_mqr = retriever_mqr.get_relevant_documents(query)
+        docs_mqr  = retriever_mqr.get_relevant_documents(query)
+        docs_sim  = retr_sim.get_relevant_documents(query)
+        docs_mmr  = retr_mmr.get_relevant_documents(query)
         docs_bm25 = vectorstore.similarity_search(query, k=top_k)
-        docs_mmr = vectorstore.as_retriever(search_type="mmr", search_kwargs={"k": top_k}).get_relevant_documents(query)
-        return rrf([docs_mqr, docs_bm25, docs_mmr], k=top_k)
+        return rrf([docs_mqr, docs_sim, docs_mmr, docs_bm25], k=top_k)
 
     return fused
     
@@ -667,7 +680,7 @@ with st.chat_message("assistant", avatar="🤖"):
     # ───────── Recuperamos los documentos relevantes ─────────
     relevant_documents = []
     if not disable_vector_store:
-        retriever = load_retriever(vectorstore, model, top_k_vectorstore)
+        retriever = load_retriever(vectorstore, top_k_vectorstore, st.secrets["OPENAI_API_KEY"])
         relevant_documents = retriever(question)   # ahora retriever es una función
 
     # ────────── Bloque de depuración: mostrar chunks ──────────
