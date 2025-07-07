@@ -27,17 +27,6 @@ import openai
 # --- CONFIGURACIÓN DE PÁGINA (DEBE SER LO PRIMERO) ---
 st.set_page_config(page_title=" ", page_icon='./customizations/logo/anim-logo-1fps-verde.gif', layout="wide")
 
-if username == "demo" and "last_question" not in st.session_state:
-    st.markdown(
-        """
-        <style>
-        [data-testid="stSidebar"] {
-            display: none;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
 
 # --- INICIALIZACIÓN DE SESSION STATE (ÚNICA Y CORRECTA) ---
 if "messages" not in st.session_state:
@@ -486,8 +475,21 @@ if not check_password():
 username = st.session_state.user
 language = st.secrets.get("languages", {}).get(username, "es_ES")
 lang_dict = load_localization(language)
-# Carga de configuración por defecto del usuario (o valores seguros si faltan)
 user_defaults = st.secrets.get("DEFAULT_SETTINGS", {}).get(username, {})
+
+# 🔒 Ocultar sidebar completamente para el usuario "demo"
+if username == "demo":
+    st.markdown(
+        """
+        <style>
+        [data-testid="stSidebar"] {
+            display: none;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
 disable_chat_history = user_defaults.get("DISABLE_CHAT_HISTORY", True)
 top_k_history = user_defaults.get("TOP_K_HISTORY", 0)
 disable_vector_store = user_defaults.get("DISABLE_VECTOR_STORE", False)
@@ -759,6 +761,10 @@ with st.chat_message("assistant", avatar="🤖"):
         # Guardamos en memoria
         if memory:
             memory.save_context({"question": question}, {"answer": final_content})
+
+        # ✅ Marca que ya hubo al menos una pregunta (solo la primera vez)
+        if "last_question" not in st.session_state:
+            st.session_state["last_question"] = question
 
         # Añadimos al historial visible
         st.session_state.messages.append(AIMessage(content=final_content))
