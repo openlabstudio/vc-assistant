@@ -122,24 +122,32 @@ def vectorize_text(uploaded_files, vectorstore, lang_dict):
 
         try:
             # 2. Seleccionamos loader según tipo
+    
             if ext == ".pdf":
+                from langchain.document_loaders import PyPDFLoader
                 loader = PyPDFLoader(tmp_path)
+                raw_docs = loader.load()
+                docs = [Document(page_content=clean_text(d.page_content), metadata=d.metadata) for d in raw_docs]
+
             elif ext == ".csv":
                 loader = CSVLoader(tmp_path, encoding="utf-8")
+                docs = loader.load()
+
             elif ext == ".txt":
                 with open(tmp_path, "r", encoding="utf-8") as f:
                     text = f.read()
                 loader = None
-                docs = [Document(page_content=text, metadata={"file_name": up_file.name})]
+                cleaned = clean_text(text)
+                docs = [Document(page_content=cleaned, metadata={"file_name": up_file.name})]
+
             else:
                 st.warning(f"Tipo {ext} no soportado: {up_file.name}")
                 continue
 
-            docs = loader.load() if loader else docs
-
             # 3. Añadimos metadatos básicos
             for d in docs:
                 d.metadata["file_name"] = up_file.name
+            
 
             # 4. Chunking
             if ext == ".pdf" and "casos" in up_file.name.lower():
@@ -251,6 +259,18 @@ def smart_chunking(docs, filename, splitter):
     new_docs = [Document(page_content=sec.strip(), metadata={"file_name": filename}) for sec in sections]
     return new_docs
 
+import re
+
+def clean_text(text):
+    """
+    Limpia el texto extraído de PDF para mejorar la segmentación posterior.
+    """
+    text = text.replace("\xa0", " ")  # reemplaza espacios no separables
+    text = re.sub(r"(?<!\n)\n(?!\n)", " ", text)  # líneas cortadas: une saltos simples
+    text = re.sub(r"\n{2,}", "\n\n", text)  # colapsa saltos múltiples
+    text = re.sub(r" {2,}", " ", text)  # colapsa múltiples espacios
+    return text.strip()
+
 def decompose_question(question, model):
     """
     Dado una pregunta compleja del usuario, genera 3–5 subpreguntas que permitan
@@ -322,14 +342,16 @@ Evita afirmaciones categóricas si no están explícitamente respaldadas por el 
         if q_type == "case_analysis":
             structure = """
 - Comienza con una frase que resuma el impacto general de la IA en los fondos descritos.
-- Luego presenta **cada caso** con un título claro que **comience por '✅ Nombre del Fondo – Título'**.
-- Bajo cada título, resume en **4 bullets**:
+- Luego presenta **cada caso identificado en el contexto** con un título que indique claramente el fondo y su iniciativa (ej. ✅ First Round – Detección de oportunidades).
+- Bajo cada título, resume en **3–4 bullets**:
   • Qué problema aborda.  
   • Qué solución de IA aplican.  
-  • Qué resultados cuantificables lograron (usa cifras si están disponibles).  
-  • Qué parte del proceso de inversión mejora (sourcing, selección, seguimiento, etc).
-- **Incluye todos los casos del contexto** sin omitir ninguno.
-- Finaliza con una frase que invite a considerar cómo estos aprendizajes podrían adaptarse a otros fondos.
+  • Qué resultados cuantificables lograron.  
+  • Qué parte del proceso de inversión mejora (deal flow, selección, seguimiento, etc).
+- Si se mencionan métricas o cifras, inclúyelas siempre que sea posible.
+- **Incluye todos los casos aunque sean breves, incluso si no hay cifras completas.**
+- No agrupar casos bajo categorías genéricas. Cada fondo debe aparecer por separado.
+- Cierra con una frase que invite a reflexionar sobre cómo estos aprendizajes pueden escalarse o adaptarse a otros fondos.
 """
         elif q_type == "strategy":
             structure = """
