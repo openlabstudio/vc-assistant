@@ -272,9 +272,15 @@ Evita afirmaciones categóricas si no están explícitamente respaldadas por el 
 
         if q_type == "case_analysis":
             structure = """
-- Comienza con una frase que resuma la idea principal.
-- Luego presenta cada caso con un **título breve** seguido de **3–4 bullets** con cifras y resultados si están disponibles.
-- No omitas ningún caso mencionado en el contexto.
+- Comienza con una frase que resuma el impacto general de la IA en los fondos descritos.
+- Luego presenta **cada caso** con un título que indique claramente el fondo y su iniciativa (ej. ✅ First Round – Detección de oportunidades).
+- Bajo cada título, resume en **3–4 bullets**:
+  • Qué problema aborda.  
+  • Qué solución de IA aplican.  
+  • Qué resultados cuantificables lograron.  
+  • Qué parte del proceso de inversión mejora (deal flow, selección, seguimiento, etc).
+- Incluye **todos los casos del contexto** sin omitir ninguno.
+- Cierra con una frase que invite a reflexionar sobre cómo estos aprendizajes pueden escalarse o adaptarse a otros fondos.
 """
         elif q_type == "strategy":
             structure = """
@@ -735,109 +741,113 @@ with st.chat_message("assistant", avatar="🤖"):
         )
         st.stop()
 
-    # ───────── Recuperamos los documentos relevantes ─────────
-    if not disable_vector_store:
-    # Descomponemos la pregunta del usuario
+# ───────── Recuperamos los documentos relevantes ─────────
+from collections import defaultdict
+
+relevant_documents = []
+
+if not disable_vector_store:
+    try:
+        # 1. Descomponemos la pregunta en subconsultas específicas
         subquestions = decompose_question(question, model)
 
-    # Recuperamos documentos para cada subpregunta
+        # 2. Recuperamos documentos por subpregunta
         all_docs = []
         for subq in subquestions:
-            try:
-                docs = vectorstore.similarity_search(subq, k=top_k_vectorstore)
-                all_docs.extend(docs)
-            except Exception as e:
-                print(f"[ERROR retrieving for subq='{subq}']: {e}")
+            retrieved = vectorstore.similarity_search(subq, k=top_k_vectorstore)
+            all_docs.append(retrieved)
 
-    # Fusión con scoring inverso de posición (reciprocal rank fusion)
-        from collections import defaultdict
-        def fuse_rrf(docs, k=top_k_vectorstore):
+        # 3. Fusión por RRF (Reciprocal Rank Fusion)
+        def fuse_rrf(results: list[list], k=top_k_vectorstore):
             scores, doc_map = defaultdict(float), {}
-            for rank, doc in enumerate(docs):
-                key = doc.page_content
-                scores[key] += 1 / (rank + 1)
-                doc_map[key] = doc
+            for docs in results:
+                for rank, doc in enumerate(docs):
+                    key = doc.page_content
+                    scores[key] += 1 / (rank + 1)
+                    doc_map[key] = doc
             top_docs = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:k]
             return [doc_map[c] for c, _ in top_docs]
 
-        relevant_documents = fuse_rrf(all_docs, k=top_k_vectorstore)
-
-
-    # ────────── Bloque de depuración: mostrar chunks ──────────
-
-    if username != "demo" and not disable_vector_store:
-        with st.sidebar.expander("📝 Chunks recuperados", expanded=False):
-            for i, doc in enumerate(relevant_documents, start=1):
-                src = doc.metadata.get("source", "sin_fuente")
-                preview = doc.page_content[:200].replace("\n", " ")
-                st.markdown(f"**{i}. {src}**  \n{preview}…")
-
-    # ────────── Preparamos memoria y prompt ──────────
-    memory = load_memory_rc(
-        chat_history,
-        top_k_history if not disable_chat_history else 0,
-    )
-    history = memory.load_memory_variables({}).get("chat_history", [])
-
-    print("\n\n========== CONTEXTO PASADO AL PROMPT ==========\n")
-    for i, doc in enumerate(relevant_documents):
-        print(f"[Chunk {i+1}]\n{doc.page_content}\n")
-    print("========== FIN CONTEXTO ==========\n\n")
-    
-    rag_chain_inputs = {
-        "context": lambda x: x["context"],
-        "chat_history": lambda x: x["chat_history"],
-        "question": lambda x: x["question"],
-    }
-    current_prompt_obj = get_prompt("Extended results", language, question=question)
-
-    chain = RunnableMap(rag_chain_inputs) | current_prompt_obj | model
-
-# 🔍 DEBUG: muestra el prompt generado antes de invocar
-    if username != "demo" and hasattr(current_prompt_obj, 'format'):
-        try:
-            formatted_prompt = current_prompt_obj.format(
-                context="\n\n".join([doc.page_content for doc in relevant_documents]),
-                chat_history=history,
-                question=question
-            )
-            st.info("Prompt generado (primeros 1000 caracteres):")
-            st.code(formatted_prompt[:1000])
-        except Exception as e:
-            st.warning(f"No se pudo mostrar el prompt generado: {e}")
-
-# ────────── Ejecutamos el chain con streaming ──────────
-    
-    try:
-        response = chain.invoke(
-            {
-                "question": question,
-                "chat_history": history,
-                "context": relevant_documents,
-            },
-            config={"callbacks": [StreamHandler(response_placeholder)]},
-        )
-        final_content = response.content
-
-        # Guardamos en memoria
-        if memory:
-            memory.save_context({"question": question}, {"answer": final_content})
-
-        # Añadimos al historial visible
-        st.session_state.messages.append(AIMessage(content=final_content))
-
-        # Generamos una pregunta de seguimiento sugerida
-        with st.spinner("Generando sugerencia..."):
-            suggested_question = generate_follow_up_question(
-                question, final_content, model
-            )
-            if suggested_question:
-                st.session_state.suggested_question = suggested_question
-
-        # Rerun para refrescar UI
-        st.rerun()
+        relevant_documents = fuse_rrf(all_docs)
 
     except Exception as e:
-        st.error(f"Error durante la generación de la respuesta: {e}")
+        st.error(f"Error durante la recuperación de documentos: {e}")
+        relevant_documents = []
+
+# ────────── Depuración: mostrar chunks recuperados ──────────
+if username != "demo" and not disable_vector_store:
+    with st.sidebar.expander("📝 Chunks recuperados", expanded=False):
+        for i, doc in enumerate(relevant_documents, start=1):
+            src = doc.metadata.get("source", "sin_fuente")
+            preview = doc.page_content[:200].replace("\n", " ")
+            st.markdown(f"**{i}. {src}**  \n{preview}…")
+
+# ────────── Preparamos memoria y prompt ──────────
+memory = load_memory_rc(
+    chat_history,
+    top_k_history if not disable_chat_history else 0,
+)
+history = memory.load_memory_variables({}).get("chat_history", [])
+
+print("\n\n========== CONTEXTO PASADO AL PROMPT ==========\n")
+for i, doc in enumerate(relevant_documents):
+    print(f"[Chunk {i+1}]\n{doc.page_content}\n")
+print("========== FIN CONTEXTO ==========\n\n")
+
+# Preparamos inputs para el chain
+rag_chain_inputs = {
+    "context": lambda x: x["context"],
+    "chat_history": lambda x: x["chat_history"],
+    "question": lambda x: x["question"],
+}
+
+current_prompt_obj = get_prompt("Extended results", language, question=question)
+chain = RunnableMap(rag_chain_inputs) | current_prompt_obj | model
+
+# 🔍 DEBUG: mostrar prompt generado antes de invocar
+if username != "demo" and hasattr(current_prompt_obj, 'format'):
+    try:
+        formatted_prompt = current_prompt_obj.format(
+            context="\n\n".join([doc.page_content for doc in relevant_documents]),
+            chat_history=history,
+            question=question
+        )
+        st.info("Prompt generado (primeros 1000 caracteres):")
+        st.code(formatted_prompt[:1000])
+    except Exception as e:
+        st.warning(f"No se pudo mostrar el prompt generado: {e}")
+
+# ────────── Ejecutamos el chain con streaming ──────────
+try:
+    response = chain.invoke(
+        {
+            "question": question,
+            "chat_history": history,
+            "context": relevant_documents,
+        },
+        config={"callbacks": [StreamHandler(response_placeholder)]},
+    )
+    final_content = response.content
+
+    # Guardamos en memoria
+    if memory:
+        memory.save_context({"question": question}, {"answer": final_content})
+
+    # Añadimos al historial visible
+    st.session_state.messages.append(AIMessage(content=final_content))
+
+    # Generamos una pregunta de seguimiento sugerida
+    with st.spinner("Generando sugerencia..."):
+        suggested_question = generate_follow_up_question(
+            question, final_content, model
+        )
+        if suggested_question:
+            st.session_state.suggested_question = suggested_question
+
+    # Rerun para refrescar UI
+    st.rerun()
+
+except Exception as e:
+    st.error(f"Error durante la generación de la respuesta: {e}")
 
 
