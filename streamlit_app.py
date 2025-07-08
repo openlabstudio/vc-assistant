@@ -612,13 +612,10 @@ st.markdown("""
 # • Así el logo siempre se muestra al entrar y desaparece tras la
 #   primera interacción, evitando el “ghost header” semitransparente.
 
-# 2️⃣ Header inicial en un placeholder que se borra tras la primera respuesta
-if "header_shown" not in st.session_state:
-    st.session_state.header_shown = False
-
-if not st.session_state.header_shown:
-    header_placeholder = st.empty()
-    with header_placeholder:
+# 2️⃣ Header inicial: logo y título
+if "header_container" not in st.session_state:
+    st.session_state.header_container = st.empty()
+    with st.session_state.header_container:
         logo_base64 = get_image_as_base64("./customizations/logo/anim-logo-1fps-verde.gif")
         st.markdown(
             f"""
@@ -634,7 +631,6 @@ if not st.session_state.header_shown:
             unsafe_allow_html=True,
         )
         st.divider()
-    st.session_state.header_placeholder = header_placeholder
 
 
 # 3. Lógica de visualización del chat
@@ -782,9 +778,9 @@ with st.chat_message("assistant", avatar="🤖"):
         st.session_state.messages.append(AIMessage(content=final_content))
 
         # 🔒 Ocultamos el header si aún no se ha hecho
-        if not st.session_state.header_shown:
-            if "header_placeholder" in st.session_state:
-                st.session_state.header_placeholder.empty()
+        if not st.session_state.get("header_shown", False):
+            if "header_container" in st.session_state:
+                st.session_state.header_container.empty()
             st.session_state.header_shown = True
 
         # Generamos una pregunta de seguimiento sugerida
