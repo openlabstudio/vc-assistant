@@ -273,26 +273,33 @@ Evita afirmaciones categóricas si no están explícitamente respaldadas por el 
         if q_type == "case_analysis":
             structure = """
 - Comienza con una frase que resuma el impacto general de la IA en los fondos descritos.
-- Luego presenta **cada caso** con un título que indique claramente el fondo y su iniciativa (ej. ✅ First Round – Detección de oportunidades).
-- Bajo cada título, resume en **3–4 bullets**:
+- Luego presenta **cada caso** con un título claro (ej. ✅ First Round – Detección de oportunidades).
+- Bajo cada título, incluye exactamente **4 bullets**:
   • Qué problema aborda.  
-  • Qué solución de IA aplican.  
-  • Qué resultados cuantificables lograron.  
-  • Qué parte del proceso de inversión mejora (deal flow, selección, seguimiento, etc).
-- Incluye **todos los casos del contexto** sin omitir ninguno.
-- Cierra con una frase que invite a reflexionar sobre cómo estos aprendizajes pueden escalarse o adaptarse a otros fondos.
+  • Qué solución basada en IA implementa (incluye herramientas si se mencionan).  
+  • Qué resultados cuantificables ha logrado (usa cifras siempre que estén disponibles: %, millones, deals, tiempo ahorrado…).  
+  • Qué parte del proceso de inversión optimiza (sourcing, análisis, seguimiento, operaciones…).
+- No omitas ningún fondo o caso mencionado en el contexto.
+- Si hay diferencias notables entre los casos (tipo de IA, fase del proceso, región o enfoque), hazlas explícitas para facilitar el contraste.
+- Finaliza con una frase que invite a aplicar o escalar estos aprendizajes en otros fondos.
 """
         elif q_type == "strategy":
             structure = """
-- Empieza con un diagnóstico breve.
-- Después ofrece pasos secuenciales, escenarios o alternativas según convenga.
-- Si hay pros y contras en el contexto, muéstralos claramente.
+- Comienza con un diagnóstico claro de la situación, problema u oportunidad descrita.
+- Luego ofrece una respuesta estructurada como **pasos secuenciales**, escenarios posibles o **alternativas estratégicas**.
+- Si el contexto contiene **beneficios, riesgos o trade-offs**, exprésalos con claridad en formato de pros y contras.
+- Siempre que haya datos cuantificables (costes, mejoras, métricas de impacto), inclúyelos como parte de la justificación estratégica.
+- Si el contexto menciona diferentes enfoques posibles (build vs buy, IA externa vs propietaria, etc.), compáralos brevemente.
+- Cierra con una recomendación accionable o reflexión sobre cómo adaptar esta estrategia a distintos tipos de fondo.
 """
         else:  # technical o fallback
             structure = """
-- Introduce en 1 frase.
-- Luego explica en viñetas o pasos, con definiciones claras.
-- Cita nombres de herramientas o conceptos si aparecen en el contexto.
+- Introduce brevemente el concepto técnico o procedimiento clave mencionado.
+- Desarrolla la explicación en **viñetas o pasos secuenciales**, usando lenguaje claro y preciso.
+- Si se mencionan herramientas, arquitecturas o frameworks, cítalos con su nombre completo.
+- Cuando el contexto incluya métricas técnicas (precisión, velocidad, ahorro, escalabilidad), inclúyelas siempre.
+- Si hay ventajas o limitaciones técnicas descritas, preséntalas en una tabla o lista separada.
+- Cierra con una frase que resuma cómo esta solución técnica contribuye al proceso de inversión o análisis.
 """
 
         final_system_prompt = f"""
@@ -545,7 +552,7 @@ if username == "demo":
 disable_chat_history = user_defaults.get("DISABLE_CHAT_HISTORY", True)
 top_k_history = user_defaults.get("TOP_K_HISTORY", 0)
 disable_vector_store = user_defaults.get("DISABLE_VECTOR_STORE", False)
-top_k_vectorstore = user_defaults.get("TOP_K_VECTORSTORE", 15)
+top_k_vectorstore = user_defaults.get("TOP_K_VECTORSTORE", 20)
 strategy = user_defaults.get("RAG_STRATEGY", "Basic Retrieval")
 prompt_type = "Extended results"
 
@@ -584,7 +591,7 @@ if username != "demo":
                 lang_dict.get('top_k_vectorstore', "Documentos a recuperar (K)"),
                 min_value=1,
                 max_value=25,
-                value=user_defaults.get("TOP_K_VECTORSTORE", 10),
+                value=default_k_vectorstore,
                 disabled=disable_vector_store    
             )
 
