@@ -605,18 +605,28 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 2️⃣ Dibujar el header SOLO la primera vez y dejarlo en un contenedor que luego podremos vaciar
-if "header_container" not in st.session_state:          # ← se crea-una-vez
-    header_container = st.empty()                       # placeholder que podemos borrar
-    with header_container:
-        logo_base64 = get_image_as_base64("./customizations/logo/anim-logo-1fps-verde.gif")
+# 2️⃣ Dibujamos el header una sola vez y lo guardamos en session_state
+#
+# • Almacenamos el placeholder en st.session_state["header_container"]
+#   para poder vaciarlo cuando llegue la primera respuesta.
+# • Así el logo siempre se muestra al entrar y desaparece tras la
+#   primera interacción, evitando el “ghost header” semitransparente.
+
+if "header_container" not in st.session_state:
+    st.session_state.header_container = st.empty()
+
+if not st.session_state.get("header_hidden", False):
+    with st.session_state.header_container:
+        logo_base64 = get_image_as_base64(
+            "./customizations/logo/anim-logo-1fps-verde.gif"
+        )
         st.markdown(
             f"""
             <div style="text-align: center;">
                 <img src="data:image/gif;base64,{logo_base64}" alt="Logo" width="150">
                 <h1>Agente Experto IA para Fondos</h1>
                 <p>Por OPENLAB VENTURES, S.L. ®</p>
-                <p style="color: #9c9d9f; font-size: 0.9rem;">
+                <p style="color:#9c9d9f;font-size:0.9rem">
                     Tu consultor virtual especializado…
                 </p>
             </div>
@@ -624,7 +634,6 @@ if "header_container" not in st.session_state:          # ← se crea-una-vez
             unsafe_allow_html=True,
         )
         st.divider()
-    st.session_state.header_container = header_container  # guardamos la referencia
 
 
 # 3. Lógica de visualización del chat
@@ -768,11 +777,14 @@ with st.chat_message("assistant", avatar="🤖"):
         if memory:
             memory.save_context({"question": question}, {"answer": final_content})
 
-        # Añadimos al historial visible
+        # Añadimos la respuesta al historial (ya se ha streameado con StreamHandler)
         st.session_state.messages.append(AIMessage(content=final_content))
-        # Ocultamos el bloque de presentación para el resto de la sesión
-        if "header_container" in st.session_state:
-            st.session_state.header_container.empty()
+
+        # 🔒 Ocultamos definitivamente el header tras la primera respuesta
+        if not st.session_state.get("header_hidden", False):
+            if "header_container" in st.session_state:
+                st.session_state.header_container.empty()
+            st.session_state.header_hidden = True
 
         # Generamos una pregunta de seguimiento sugerida
         with st.spinner("Generando sugerencia..."):
