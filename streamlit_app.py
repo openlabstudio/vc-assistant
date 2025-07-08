@@ -542,7 +542,7 @@ disable_vector_store = user_defaults.get("DISABLE_VECTOR_STORE", False)
 top_k_vectorstore = user_defaults.get("TOP_K_VECTORSTORE", 5)
 strategy = user_defaults.get("RAG_STRATEGY", "Basic Retrieval")
 prompt_type = user_defaults.get("PROMPT_TYPE", "Extended results")
-custom_prompt = user_defaults.get("CUSTOM_PROMPT", "")
+# custom_prompt = user_defaults.get("CUSTOM_PROMPT", "")
 embedding = load_embedding_rc()
 vectorstore = load_vectorstore_rc(embedding) if embedding else None
 chat_history = load_chat_history_rc(username, st.session_state.session_id) if vectorstore else None
@@ -622,7 +622,7 @@ if username != "demo":
                 st.header("Personalidad del Asistente")
                 st.caption("El asistente usa siempre el modo 'Extended results' (prompt fijo).")
                 prompt_type = "Extended results"   # forzamos estilo
-                custom_prompt = ""                 # no se utiliza
+                # custom_prompt = ""                 # no se utiliza
 
 
 
@@ -788,7 +788,7 @@ with st.chat_message("assistant", avatar="🤖"):
         "chat_history": lambda x: x["chat_history"],
         "question": lambda x: x["question"],
     }
-    current_prompt_obj = get_prompt(prompt_type, custom_prompt, language, question=question)
+    current_prompt_obj = get_prompt(prompt_type, language, question=question)
 
     chain = RunnableMap(rag_chain_inputs) | current_prompt_obj | model
 
