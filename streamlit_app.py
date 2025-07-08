@@ -455,7 +455,7 @@ def load_chat_history_rc(username, session_id):
 
 @st.cache_resource(show_spinner="Cargando modelo de lenguaje...")
 def load_model_rc():
-    return ChatOpenAI(temperature=0.3, model='gpt-4o', streaming=False, verbose=False)
+    return ChatOpenAI(temperature=0.3, model='gpt-4o', streaming=True, verbose=False)
 
 
 @st.cache_resource()
@@ -605,21 +605,26 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 2️⃣ Sólo una vez: dibujar header (nivel 0 también)
-if not st.session_state.header_drawn:
-    logo_base64 = get_image_as_base64("./customizations/logo/anim-logo-1fps-verde.gif")
-    st.markdown(f"""
-        <div style="text-align: center;">
-            <img src="data:image/gif;base64,{logo_base64}" alt="Logo" width="150">
-            <h1>Agente Experto IA para Fondos</h1>
-            <p>Por OPENLAB VENTURES, S.L. ®</p>
-            <p style="color: #9c9d9f; font-size: 0.9rem;">
-                Tu consultor virtual especializado…
-            </p>
-        </div>
-    """, unsafe_allow_html=True)
-    st.divider()
-    st.session_state.header_drawn = True
+# 2️⃣ Dibujar el header SOLO la primera vez y dejarlo en un contenedor que luego podremos vaciar
+if "header_container" not in st.session_state:          # ← se crea-una-vez
+    header_container = st.empty()                       # placeholder que podemos borrar
+    with header_container:
+        logo_base64 = get_image_as_base64("./customizations/logo/anim-logo-1fps-verde.gif")
+        st.markdown(
+            f"""
+            <div style="text-align: center;">
+                <img src="data:image/gif;base64,{logo_base64}" alt="Logo" width="150">
+                <h1>Agente Experto IA para Fondos</h1>
+                <p>Por OPENLAB VENTURES, S.L. ®</p>
+                <p style="color: #9c9d9f; font-size: 0.9rem;">
+                    Tu consultor virtual especializado…
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.divider()
+    st.session_state.header_container = header_container  # guardamos la referencia
 
 
 # 3. Lógica de visualización del chat
@@ -765,6 +770,9 @@ with st.chat_message("assistant", avatar="🤖"):
 
         # Añadimos al historial visible
         st.session_state.messages.append(AIMessage(content=final_content))
+        # Ocultamos el bloque de presentación para el resto de la sesión
+        if "header_container" in st.session_state:
+            st.session_state.header_container.empty()
 
         # Generamos una pregunta de seguimiento sugerida
         with st.spinner("Generando sugerencia..."):
