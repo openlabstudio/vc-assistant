@@ -235,15 +235,29 @@ from langchain.prompts import (
     HumanMessagePromptTemplate,
 )
 
-def get_prompt(language, question):
+def get_prompt(type_param, language, question=None):
     """
     Devuelve un ChatPromptTemplate adaptado al tipo de pregunta.
-    Usa siempre el modo 'Extended results' con clasificación adaptativa.
     """
+    from langchain.prompts import (
+        ChatPromptTemplate,
+        SystemMessagePromptTemplate,
+        HumanMessagePromptTemplate,
+    )
 
-    q_type = classify_question_type(question or "")
+    def classify_question_type(q):
+        q = q.lower()
+        if any(palabra in q for palabra in ["caso", "ejemplo", "benchmark", "fondos que", "quién ha"]):
+            return "case_analysis"
+        elif any(palabra in q for palabra in ["cómo", "pasos", "estrategia", "plan", "enfoque"]):
+            return "strategy"
+        else:
+            return "technical"
 
-    common_prefix = """
+    if type_param == "Extended results":
+        q_type = classify_question_type(question or "")
+
+        common_prefix = """
 Eres un asistente experto. Tu única función es responder usando EXCLUSIVAMENTE el contenido del bloque 'Contexto'.
 No puedes usar conocimientos externos, ni completar con inferencias, ni rellenar huecos. Sé riguroso y directo.
 Si no puedes responder con claridad basándote en el contexto, responde:
@@ -256,26 +270,26 @@ Usa un tono consultivo y fundamentado, iniciando tus respuestas con expresiones 
 Evita afirmaciones categóricas si no están explícitamente respaldadas por el contenido.
 """
 
-    if q_type == "case_analysis":
-        structure = """
+        if q_type == "case_analysis":
+            structure = """
 - Comienza con una frase que resuma la idea principal.
 - Luego presenta cada caso con un **título breve** seguido de **3–4 bullets** con cifras y resultados si están disponibles.
 - No omitas ningún caso mencionado en el contexto.
 """
-    elif q_type == "strategy":
-        structure = """
+        elif q_type == "strategy":
+            structure = """
 - Empieza con un diagnóstico breve.
 - Después ofrece pasos secuenciales, escenarios o alternativas según convenga.
 - Si hay pros y contras en el contexto, muéstralos claramente.
 """
-    else:  # technical o fallback
-        structure = """
+        else:  # technical o fallback
+            structure = """
 - Introduce en 1 frase.
 - Luego explica en viñetas o pasos, con definiciones claras.
 - Cita nombres de herramientas o conceptos si aparecen en el contexto.
 """
 
-    final_system_prompt = f"""
+        final_system_prompt = f"""
 ### ROL Y DIRECTIVA ###
 {common_prefix}
 
@@ -295,12 +309,37 @@ Evita afirmaciones categóricas si no están explícitamente respaldadas por el 
 
 **Respuesta:**"""
 
-    return ChatPromptTemplate.from_messages(
-        [
-            SystemMessagePromptTemplate.from_template(final_system_prompt),
-            HumanMessagePromptTemplate.from_template("{question}"),
-        ]
-    )
+        return ChatPromptTemplate.from_messages(
+            [
+                SystemMessagePromptTemplate.from_template(final_system_prompt),
+                HumanMessagePromptTemplate.from_template("{question}"),
+            ]
+        )
+
+    elif type_param == "Short results":
+        system_prompt = """Eres un asistente que responde de forma muy breve.
+Si no conoces la respuesta basándote en el contexto, di claramente:
+"No conozco la respuesta basada en los documentos proporcionados".
+
+Contexto:  
+{context}
+
+Historial:  
+{chat_history}
+
+Pregunta:  
+{question}
+"""
+        return ChatPromptTemplate.from_messages(
+            [
+                SystemMessagePromptTemplate.from_template(system_prompt),
+                HumanMessagePromptTemplate.from_template("{question}"),
+            ]
+        )
+
+    else:
+        raise ValueError(f"Tipo de prompt no soportado: {type_param}")
+
 
 from collections import defaultdict
 from langchain.retrievers import MultiQueryRetriever
