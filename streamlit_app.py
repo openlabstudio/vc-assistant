@@ -541,7 +541,8 @@ top_k_history = user_defaults.get("TOP_K_HISTORY", 0)
 disable_vector_store = user_defaults.get("DISABLE_VECTOR_STORE", False)
 top_k_vectorstore = user_defaults.get("TOP_K_VECTORSTORE", 5)
 strategy = user_defaults.get("RAG_STRATEGY", "Basic Retrieval")
-prompt_type = user_defaults.get("PROMPT_TYPE", "Extended results")
+prompt_type = "Extended results"
+
 # custom_prompt = user_defaults.get("CUSTOM_PROMPT", "")
 embedding = load_embedding_rc()
 vectorstore = load_vectorstore_rc(embedding) if embedding else None
@@ -581,9 +582,9 @@ if username != "demo":
                 disabled=disable_vector_store    
             )
 
-            rag_strategies = ('Basic Retrieval', 'Maximal Marginal Relevance', 'Fusion')
-            default_strategy = user_defaults.get("RAG_STRATEGY", 'Basic Retrieval')
-            strategy = st.selectbox(lang_dict.get('rag_strategy', "RAG Strategy"), rag_strategies, index=rag_strategies.index(default_strategy) if default_strategy in rag_strategies else 0, disabled=disable_vector_store)
+            #rag_strategies = ('Basic Retrieval', 'Maximal Marginal Relevance', 'Fusion')
+            #default_strategy = user_defaults.get("RAG_STRATEGY", 'Basic Retrieval')
+            #strategy = st.selectbox(lang_dict.get('rag_strategy', "RAG Strategy"), rag_strategies, index=rag_strategies.index(default_strategy) if default_strategy in rag_strategies else 0, disabled=disable_vector_store)
             
             st.markdown("---")
             disable_chat_history = st.toggle(lang_dict.get('disable_chat_history', "Desactivar Memoria"), value=False)
@@ -788,7 +789,7 @@ with st.chat_message("assistant", avatar="🤖"):
         "chat_history": lambda x: x["chat_history"],
         "question": lambda x: x["question"],
     }
-    current_prompt_obj = get_prompt(prompt_type, language, question=question)
+    current_prompt_obj = get_prompt("Extended results", language, question=question)
 
     chain = RunnableMap(rag_chain_inputs) | current_prompt_obj | model
 
