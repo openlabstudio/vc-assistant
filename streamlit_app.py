@@ -150,7 +150,9 @@ def vectorize_text(uploaded_files, vectorstore, lang_dict):
                 import re
                 from langchain.schema import Document
 
-                pattern = r"((?:✅|Caso\s+\d+|Ejemplo\s+\d+).*?)(?=\n(?:✅|Caso\s+\d+|Ejemplo\s+\d+)|\Z)"
+                #pattern = r"((?:✅|Caso\s+\d+|Ejemplo\s+\d+).*?)(?=\n(?:✅|Caso\s+\d+|Ejemplo\s+\d+)|\Z)"
+                pattern = r"(?=\d+\.\s+Cómo\s+[^\n]+)"
+
 
                 case_chunks = re.findall(pattern, full_text, re.DOTALL)
 
@@ -162,8 +164,9 @@ def vectorize_text(uploaded_files, vectorstore, lang_dict):
 
             else:
                 # Chunking tradicional
-                chunks = splitter.split_documents(docs)
-                
+                #chunks = splitter.split_documents(docs)
+                chunks = smart_chunking(docs, up_file.name, splitter)
+
             # 5. Hash + metadatos únicos
             for c in chunks:
                 sha = hashlib.sha1(c.page_content.encode()).hexdigest()
@@ -226,6 +229,27 @@ Pregunta de Seguimiento Sugerida:"""
         return suggested_question
     except Exception:
         return None # Si algo falla, simplemente no devolvemos nada
+
+import re
+from langchain.schema import Document
+
+def smart_chunking(docs, filename, splitter):
+    """
+    Si detecta que un documento PDF sigue una estructura tipo '1. Cómo X', '2. Cómo Y',
+    realiza un chunking semántico por secciones. Si no, aplica el splitter estándar.
+    """
+    full_text = "\n".join([d.page_content for d in docs])
+    pattern = r"(?=\d+\.\s+Cómo\s+[^\n]+)"
+    parts = re.split(pattern, full_text)
+
+    # Si no hay suficientes partes, usar chunking normal
+    if len(parts) < 3:
+        return splitter.split_documents(docs)
+
+    # Reconstruimos secciones completas
+    sections = [parts[i] + parts[i+1] for i in range(1, len(parts)-1, 2)]
+    new_docs = [Document(page_content=sec.strip(), metadata={"file_name": filename}) for sec in sections]
+    return new_docs
 
 def decompose_question(question, model):
     """
@@ -298,15 +322,14 @@ Evita afirmaciones categóricas si no están explícitamente respaldadas por el 
         if q_type == "case_analysis":
             structure = """
 - Comienza con una frase que resuma el impacto general de la IA en los fondos descritos.
-- Luego presenta **cada caso** con un título que indique claramente el fondo y su iniciativa (ej. ✅ First Round – Optimización con datos históricos).
-- Bajo cada título, resume en **4–5 bullets**:
+- Luego presenta **cada caso** con un título claro que **comience por '✅ Nombre del Fondo – Título'**.
+- Bajo cada título, resume en **4 bullets**:
   • Qué problema aborda.  
-  • Qué solución de IA implementaron (plataforma, tecnología, enfoque).  
-  • Qué métricas o resultados cuantificables lograron (ej. % mejoras, velocidad, ahorro, volumen).  
-  • Qué parte(s) del ciclo inversor mejora (sourcing, due diligence, relación con LPs, gestión de portafolio, etc.).  
-  • (Opcional) Un ejemplo práctico o caso dentro del portafolio, si está disponible.
-- Incluye **todos los casos disponibles en el contexto**, sin omitir ninguno.
-- Cierra con una frase que conecte estos aprendizajes con la posibilidad de escalarse o replicarse en otros fondos, incluyendo PE si aplica.
+  • Qué solución de IA aplican.  
+  • Qué resultados cuantificables lograron (usa cifras si están disponibles).  
+  • Qué parte del proceso de inversión mejora (sourcing, selección, seguimiento, etc).
+- **Incluye todos los casos del contexto** sin omitir ninguno.
+- Finaliza con una frase que invite a considerar cómo estos aprendizajes podrían adaptarse a otros fondos.
 """
         elif q_type == "strategy":
             structure = """
@@ -577,7 +600,7 @@ if username == "demo":
 disable_chat_history = user_defaults.get("DISABLE_CHAT_HISTORY", True)
 top_k_history = user_defaults.get("TOP_K_HISTORY", 0)
 disable_vector_store = user_defaults.get("DISABLE_VECTOR_STORE", False)
-top_k_vectorstore = user_defaults.get("TOP_K_VECTORSTORE", 20)
+top_k_vectorstore = user_defaults.get("TOP_K_VECTORSTORE", 30)
 strategy = user_defaults.get("RAG_STRATEGY", "Basic Retrieval")
 prompt_type = "Extended results"
 
@@ -615,7 +638,7 @@ if username != "demo":
             top_k_vectorstore = st.slider(
                 lang_dict.get('top_k_vectorstore', "Documentos a recuperar (K)"),
                 min_value=1,
-                max_value=25,
+                max_value=30,
                 value=default_k_vectorstore,
                 disabled=disable_vector_store    
             )
