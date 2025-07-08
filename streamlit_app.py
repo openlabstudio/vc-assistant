@@ -545,7 +545,7 @@ if username == "demo":
 disable_chat_history = user_defaults.get("DISABLE_CHAT_HISTORY", True)
 top_k_history = user_defaults.get("TOP_K_HISTORY", 0)
 disable_vector_store = user_defaults.get("DISABLE_VECTOR_STORE", False)
-top_k_vectorstore = user_defaults.get("TOP_K_VECTORSTORE", 5)
+top_k_vectorstore = user_defaults.get("TOP_K_VECTORSTORE", 15)
 strategy = user_defaults.get("RAG_STRATEGY", "Basic Retrieval")
 prompt_type = "Extended results"
 
@@ -751,6 +751,10 @@ if not disable_vector_store:
         # 1. Descomponemos la pregunta en subconsultas específicas
         subquestions = decompose_question(question, model)
 
+        print("=== SUBPREGUNTAS GENERADAS ===")
+        for sq in subquestions:
+            print("-", sq)
+            
         # 2. Recuperamos documentos por subpregunta
         all_docs = []
         for subq in subquestions:
@@ -769,6 +773,11 @@ if not disable_vector_store:
             return [doc_map[c] for c, _ in top_docs]
 
         relevant_documents = fuse_rrf(all_docs)
+
+    # 👇 DEBUG: Mostrar en consola los documentos seleccionados
+        print("=== DOCUMENTOS FINALES PASADOS AL PROMPT ===")
+        for i, doc in enumerate(relevant_documents):
+            print(f"[{i+1}] {doc.metadata.get('source', '')[:30]}: {doc.page_content[:200]}...")
 
     except Exception as e:
         st.error(f"Error durante la recuperación de documentos: {e}")
