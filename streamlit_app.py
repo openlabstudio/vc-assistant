@@ -142,8 +142,28 @@ def vectorize_text(uploaded_files, vectorstore, lang_dict):
                 d.metadata["file_name"] = up_file.name
 
             # 4. Chunking
-            chunks = splitter.split_documents(docs)
+            if ext == ".pdf" and "casos" in up_file.name.lower():
+                 # Si es un PDF con casos de éxito, aplicamos chunking por secciones
+                full_text = "\n".join([d.page_content for d in docs])
+    
+                # Dividimos cada caso a partir de encabezados que empiezan por "✅"
+                import re
+                from langchain.schema import Document
 
+                pattern = r"((?:✅|Caso\s+\d+|Ejemplo\s+\d+).*?)(?=\n(?:✅|Caso\s+\d+|Ejemplo\s+\d+)|\Z)"
+
+                case_chunks = re.findall(pattern, full_text, re.DOTALL)
+
+                chunks = [
+                    Document(page_content=chunk.strip(), metadata={"file_name": up_file.name})
+                    for chunk in case_chunks if len(chunk.strip()) > 100  # filtra basura muy corta
+                ]
+                print(f"[INFO] Documento '{up_file.name}' – Casos detectados: {len(chunks)} chunks basados en secciones")
+
+            else:
+                # Chunking tradicional
+                chunks = splitter.split_documents(docs)
+                
             # 5. Hash + metadatos únicos
             for c in chunks:
                 sha = hashlib.sha1(c.page_content.encode()).hexdigest()
@@ -212,8 +232,13 @@ def decompose_question(question, model):
     Dado una pregunta compleja del usuario, genera 3–5 subpreguntas que permitan
     recuperar mejor la información relevante en una base documental.
     """
-    _template = """Descompón la siguiente pregunta en varias subpreguntas específicas y claras, que puedan ser respondidas buscando directamente en documentos. 
-Evita repetir conceptos. Devuelve solo la lista de subpreguntas, separadas por saltos de línea.
+    _template = """Descompón la siguiente pregunta en varias subpreguntas específicas y claras, que permitan recuperar mejor información en documentos.
+Incluye al menos:
+- Subpreguntas que mencionen **nombres concretos de fondos si es relevante** (por ejemplo: EQT, SignalFire, Moonfire…).
+- Subpreguntas centradas en **etapas del proceso inversor** (sourcing, due diligence, seguimiento, etc).
+- Subpreguntas que busquen cifras de impacto, resultados o herramientas usadas.
+
+Devuelve solo la lista de subpreguntas, separadas por saltos de línea.
 
 Pregunta original: {user_question}
 
@@ -273,15 +298,15 @@ Evita afirmaciones categóricas si no están explícitamente respaldadas por el 
         if q_type == "case_analysis":
             structure = """
 - Comienza con una frase que resuma el impacto general de la IA en los fondos descritos.
-- Luego presenta **cada caso** con un título claro (ej. ✅ First Round – Detección de oportunidades).
-- Bajo cada título, incluye exactamente **4 bullets**:
+- Luego presenta **cada caso** con un título que indique claramente el fondo y su iniciativa (ej. ✅ First Round – Optimización con datos históricos).
+- Bajo cada título, resume en **4–5 bullets**:
   • Qué problema aborda.  
-  • Qué solución basada en IA implementa (incluye herramientas si se mencionan).  
-  • Qué resultados cuantificables ha logrado (usa cifras siempre que estén disponibles: %, millones, deals, tiempo ahorrado…).  
-  • Qué parte del proceso de inversión optimiza (sourcing, análisis, seguimiento, operaciones…).
-- No omitas ningún fondo o caso mencionado en el contexto.
-- Si hay diferencias notables entre los casos (tipo de IA, fase del proceso, región o enfoque), hazlas explícitas para facilitar el contraste.
-- Finaliza con una frase que invite a aplicar o escalar estos aprendizajes en otros fondos.
+  • Qué solución de IA implementaron (plataforma, tecnología, enfoque).  
+  • Qué métricas o resultados cuantificables lograron (ej. % mejoras, velocidad, ahorro, volumen).  
+  • Qué parte(s) del ciclo inversor mejora (sourcing, due diligence, relación con LPs, gestión de portafolio, etc.).  
+  • (Opcional) Un ejemplo práctico o caso dentro del portafolio, si está disponible.
+- Incluye **todos los casos disponibles en el contexto**, sin omitir ninguno.
+- Cierra con una frase que conecte estos aprendizajes con la posibilidad de escalarse o replicarse en otros fondos, incluyendo PE si aplica.
 """
         elif q_type == "strategy":
             structure = """
