@@ -235,55 +235,66 @@ from langchain.prompts import (
     HumanMessagePromptTemplate,
 )
 
-def get_prompt(type_param, custom_prompt, language):
+def get_prompt(type_param, custom_prompt, language, question=None):
     """
-    Devuelve un ChatPromptTemplate con los campos {context}, {chat_history} y
-    {question} listos para ser rellenados por RunnableMap.
+    Devuelve un ChatPromptTemplate adaptado al tipo de pregunta.
     """
-    # ---------------------- Extended results ----------------------
-    if type_param == "Extended results":
-        system_prompt = """### TU ROL COMO ASISTENTE EXPERTO ###
-Eres un asistente experto en IA, Venture Capital y Private Equity. Tu única función es responder preguntas basándote **exclusivamente en el contenido del bloque 'Contexto'**. No tienes acceso a ningún conocimiento externo. No estás autorizado a completar respuestas con suposiciones, intuiciones o generalidades.
+    # Detectamos el tipo de pregunta si no viene predefinido
+    q_type = classify_question_type(question or "") if type_param == "Extended results" else None
+
+    common_prefix = """
+Eres un asistente experto. Tu única función es responder usando EXCLUSIVAMENTE el contenido del bloque 'Contexto'.
+No puedes usar conocimientos externos, ni completar con inferencias, ni rellenar huecos. Sé riguroso y directo.
+Si no puedes responder con claridad basándote en el contexto, responde:
+"No puedo responder con la información disponible en los documentos proporcionados."
+"""
+
+    # Plantilla común con estructura dinámica según tipo de pregunta
+    if q_type == "case_analysis":
+        structure = """
+- Comienza con una frase que resuma la idea principal.
+- Luego presenta cada caso con un **título breve** seguido de **3–4 bullets** con cifras y resultados si están disponibles.
+- No omitas ningún caso mencionado en el contexto.
+"""
+    elif q_type == "strategy":
+        structure = """
+- Empieza con un diagnóstico breve.
+- Después ofrece pasos secuenciales, escenarios o alternativas según convenga.
+- Si hay pros y contras en el contexto, muéstralos claramente.
+"""
+    else:  # technical o fallback
+        structure = """
+- Introduce en 1 frase.
+- Luego explica en viñetas o pasos, con definiciones claras.
+- Cita nombres de herramientas o conceptos si aparecen en el contexto.
+"""
+
+    final_system_prompt = f"""
+### ROL Y DIRECTIVA ###
+{common_prefix}
+
+### ESTILO ###
+{structure}
 
 ---
 
-### INSTRUCCIONES OBLIGATORIAS (NO MODIFICABLES) ###
-1. ❌ **No inventes**. Responde **solo** si la información está expresamente contenida en el 'Contexto'.
-2. ❌ **No utilices conocimiento general, memoria de entrenamiento ni sentido común**.
-3. ✅ Si el contexto es insuficiente para responder con precisión, responde con:  
-   `"No puedo responder con la información disponible en los documentos proporcionados."`
-4. ✅ Resume **todos** los casos, ejemplos o evidencias que estén presentes en el contexto, sin omitir ninguno.
-5. ✅ Incluye cifras, nombres propios y resultados tangibles **solo si están en el texto**.
+**Contexto Relevante de los Documentos:**  
+{{context}}
 
----
+**Historial de Conversación:**  
+{{chat_history}}
 
-### ESTILO Y FORMATO REQUERIDO ###
-- Introduce la respuesta en **1–2 frases** que destaquen lo más importante.
-- Luego adapta según el tipo de pregunta:
-  - Para análisis de casos → usa bloques con subtítulo (ej. ✅ *1. EQT – Motherbrain*)
-  - Para preguntas técnicas o estratégicas → usa viñetas, pasos o pros/contras.
-- Sé conciso, profesional y orientado a datos.
-- **No especules. No completes huecos. No generalices.**
+**Pregunta del Usuario:**  
+{{question}}
 
----
+**Respuesta:**"""
 
-**Documentos proporcionados (Contexto):**  
-{context}
-
-**Historial de la conversación:**  
-{chat_history}
-
-**Pregunta del usuario:**  
-{question}
-
-**Tu respuesta, basada solo en el contexto anterior:**"""
-
-        return ChatPromptTemplate.from_messages(
-            [
-                SystemMessagePromptTemplate.from_template(system_prompt),
-                HumanMessagePromptTemplate.from_template("{question}"),
-            ]
-        )
+    return ChatPromptTemplate.from_messages(
+        [
+            SystemMessagePromptTemplate.from_template(final_system_prompt),
+            HumanMessagePromptTemplate.from_template("{question}"),
+        ]
+    )
 
     # ---------------------- Short results ----------------------
     elif type_param == "Short results":
@@ -765,7 +776,8 @@ with st.chat_message("assistant", avatar="🤖"):
         "chat_history": lambda x: x["chat_history"],
         "question": lambda x: x["question"],
     }
-    current_prompt_obj = get_prompt(prompt_type, custom_prompt, language)
+    current_prompt_obj = get_prompt(prompt_type, custom_prompt, language, question=question)
+
     chain = RunnableMap(rag_chain_inputs) | current_prompt_obj | model
 
 # 🔍 DEBUG: muestra el prompt generado antes de invocar
