@@ -207,6 +207,28 @@ Pregunta de Seguimiento Sugerida:"""
     except Exception:
         return None # Si algo falla, simplemente no devolvemos nada
 
+def decompose_question(question, model):
+    """
+    Dado una pregunta compleja del usuario, genera 3–5 subpreguntas que permitan
+    recuperar mejor la información relevante en una base documental.
+    """
+    _template = """Descompón la siguiente pregunta en varias subpreguntas específicas y claras, que puedan ser respondidas buscando directamente en documentos. 
+Evita repetir conceptos. Devuelve solo la lista de subpreguntas, separadas por saltos de línea.
+
+Pregunta original: {user_question}
+
+Subpreguntas:"""
+
+    prompt = ChatPromptTemplate.from_template(_template)
+    chain = prompt | model | StrOutputParser()
+
+    try:
+        subquestions_raw = chain.invoke({"user_question": question})
+        return [q.strip() for q in subquestions_raw.split("\n") if q.strip()]
+    except Exception as e:
+        print(f"[ERROR decompose_question]: {e}")
+        return [question]  # fallback: usar pregunta original si falla
+
 from langchain.prompts import (
     ChatPromptTemplate,
     SystemMessagePromptTemplate,
@@ -689,19 +711,31 @@ with st.chat_message("assistant", avatar="🤖"):
         st.stop()
 
     # ───────── Recuperamos los documentos relevantes ─────────
-
-    relevant_documents = []
     if not disable_vector_store:
-    # 1. similaridad coseno pura, k=25 (slider)
-        relevant_documents = vectorstore.similarity_search(
-        question, k=top_k_vectorstore
-        )
+    # Descomponemos la pregunta del usuario
+        subquestions = decompose_question(question, model)
 
-        # 🔎 Mostrar contenido de los documentos recuperados (debug visual)
-    #    with st.expander("🧠 Documentos recuperados (debug)", expanded=False):
-    #        for i, doc in enumerate(relevant_documents, start=1):
-    #            st.markdown(f"**Documento #{i}:**")
-    #            st.code(doc.page_content[:1000])
+    # Recuperamos documentos para cada subpregunta
+        all_docs = []
+        for subq in subquestions:
+            try:
+                docs = vectorstore.similarity_search(subq, k=top_k_vectorstore)
+                all_docs.extend(docs)
+            except Exception as e:
+                print(f"[ERROR retrieving for subq='{subq}']: {e}")
+
+    # Fusión con scoring inverso de posición (reciprocal rank fusion)
+        from collections import defaultdict
+        def fuse_rrf(docs, k=top_k_vectorstore):
+            scores, doc_map = defaultdict(float), {}
+            for rank, doc in enumerate(docs):
+                key = doc.page_content
+                scores[key] += 1 / (rank + 1)
+                doc_map[key] = doc
+            top_docs = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:k]
+            return [doc_map[c] for c, _ in top_docs]
+
+        relevant_documents = fuse_rrf(all_docs, k=top_k_vectorstore)
 
 
     # ────────── Bloque de depuración: mostrar chunks ──────────
