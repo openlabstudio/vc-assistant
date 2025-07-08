@@ -455,7 +455,7 @@ def load_chat_history_rc(username, session_id):
 
 @st.cache_resource(show_spinner="Cargando modelo de lenguaje...")
 def load_model_rc():
-    return ChatOpenAI(temperature=0.3, model='gpt-4o', streaming=False, verbose=False)
+    return ChatOpenAI(temperature=0.3, model='gpt-4o', streaming=True, verbose=False)
 
 
 @st.cache_resource()
