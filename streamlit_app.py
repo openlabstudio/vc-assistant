@@ -612,21 +612,21 @@ st.markdown("""
 # • Así el logo siempre se muestra al entrar y desaparece tras la
 #   primera interacción, evitando el “ghost header” semitransparente.
 
-if "header_container" not in st.session_state:
-    st.session_state.header_container = st.empty()
+# 2️⃣ Header inicial en un placeholder que se borra tras la primera respuesta
+if "header_shown" not in st.session_state:
+    st.session_state.header_shown = False
 
-if not st.session_state.get("header_hidden", False):
-    with st.session_state.header_container:
-        logo_base64 = get_image_as_base64(
-            "./customizations/logo/anim-logo-1fps-verde.gif"
-        )
+if not st.session_state.header_shown:
+    header_placeholder = st.empty()
+    with header_placeholder:
+        logo_base64 = get_image_as_base64("./customizations/logo/anim-logo-1fps-verde.gif")
         st.markdown(
             f"""
             <div style="text-align: center;">
                 <img src="data:image/gif;base64,{logo_base64}" alt="Logo" width="150">
                 <h1>Agente Experto IA para Fondos</h1>
                 <p>Por OPENLAB VENTURES, S.L. ®</p>
-                <p style="color:#9c9d9f;font-size:0.9rem">
+                <p style="color: #9c9d9f; font-size: 0.9rem;">
                     Tu consultor virtual especializado…
                 </p>
             </div>
@@ -634,6 +634,7 @@ if not st.session_state.get("header_hidden", False):
             unsafe_allow_html=True,
         )
         st.divider()
+    st.session_state.header_placeholder = header_placeholder
 
 
 # 3. Lógica de visualización del chat
@@ -777,14 +778,14 @@ with st.chat_message("assistant", avatar="🤖"):
         if memory:
             memory.save_context({"question": question}, {"answer": final_content})
 
-        # Añadimos la respuesta al historial (ya se ha streameado con StreamHandler)
+        # Añadimos la respuesta al historial
         st.session_state.messages.append(AIMessage(content=final_content))
 
-        # 🔒 Ocultamos definitivamente el header tras la primera respuesta
-        if not st.session_state.get("header_hidden", False):
-            if "header_container" in st.session_state:
-                st.session_state.header_container.empty()
-            st.session_state.header_hidden = True
+        # 🔒 Ocultamos el header si aún no se ha hecho
+        if not st.session_state.header_shown:
+            if "header_placeholder" in st.session_state:
+                st.session_state.header_placeholder.empty()
+            st.session_state.header_shown = True
 
         # Generamos una pregunta de seguimiento sugerida
         with st.spinner("Generando sugerencia..."):
