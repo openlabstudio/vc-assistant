@@ -235,21 +235,27 @@ from langchain.prompts import (
     HumanMessagePromptTemplate,
 )
 
-def get_prompt(type_param, custom_prompt, language, question=None):
+def get_prompt(language, question):
     """
     Devuelve un ChatPromptTemplate adaptado al tipo de pregunta.
+    Usa siempre el modo 'Extended results' con clasificación adaptativa.
     """
-    # Detectamos el tipo de pregunta si no viene predefinido
-    q_type = classify_question_type(question or "") if type_param == "Extended results" else None
+
+    q_type = classify_question_type(question or "")
 
     common_prefix = """
 Eres un asistente experto. Tu única función es responder usando EXCLUSIVAMENTE el contenido del bloque 'Contexto'.
 No puedes usar conocimientos externos, ni completar con inferencias, ni rellenar huecos. Sé riguroso y directo.
 Si no puedes responder con claridad basándote en el contexto, responde:
 "No puedo responder con la información disponible en los documentos proporcionados."
+
+Siempre que el contexto lo permita, proporciona datos específicos, cifras, impactos medibles o ejemplos con nombres concretos. No seas vago ni generalista.
+
+Usa un tono consultivo y fundamentado, iniciando tus respuestas con expresiones como:
+"Según los documentos analizados…", "Los datos sugieren que…", "Con base en el contexto proporcionado…"
+Evita afirmaciones categóricas si no están explícitamente respaldadas por el contenido.
 """
 
-    # Plantilla común con estructura dinámica según tipo de pregunta
     if q_type == "case_analysis":
         structure = """
 - Comienza con una frase que resuma la idea principal.
@@ -295,39 +301,6 @@ Si no puedes responder con claridad basándote en el contexto, responde:
             HumanMessagePromptTemplate.from_template("{question}"),
         ]
     )
-
-    # ---------------------- Short results ----------------------
-    elif type_param == "Short results":
-        system_prompt = """Eres un asistente que responde de forma muy breve.
-Si no conoces la respuesta basándote en el contexto, di claramente
-'No conozco la respuesta basada en los documentos proporcionados'.
-
-Contexto:  
-{context}
-
-Historial:  
-{chat_history}
-
-Pregunta:  
-{question}
-"""
-        return ChatPromptTemplate.from_messages(
-            [
-                SystemMessagePromptTemplate.from_template(system_prompt),
-                HumanMessagePromptTemplate.from_template("{question}"),
-            ]
-        )
-
-    # ---------------------- Custom ----------------------
-    else:
-        # Si el usuario ha proporcionado un prompt personalizado, úsalo tal cual.
-        template = custom_prompt if custom_prompt else "{question}"
-        return ChatPromptTemplate.from_messages(
-            [
-                SystemMessagePromptTemplate.from_template(template),
-                HumanMessagePromptTemplate.from_template("{question}"),
-            ]
-        )
 
 from collections import defaultdict
 from langchain.retrievers import MultiQueryRetriever
