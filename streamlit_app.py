@@ -37,6 +37,7 @@ if "header_drawn" not in st.session_state: # Añadido para controlar el dibujado
     st.session_state.header_drawn = False
 
 
+
 # --- CONFIGURACIÓN GLOBAL ---
 ASTRA_DB_COLLECTION_NAME = "vc_assistant"
 ADMIN_USERS = ["openlab_admin"]
@@ -73,7 +74,7 @@ def check_password():
 
     if st.session_state.get('password_correct', False):
         return True
-    
+
     login_form()
     if "password_correct" in st.session_state and not st.session_state['password_correct']:
         st.error('😕 Usuario desconocido o contraseña incorrecta')
@@ -122,7 +123,7 @@ def vectorize_text(uploaded_files, vectorstore, lang_dict):
 
         try:
             # 2. Seleccionamos loader según tipo
-    
+
             if ext == ".pdf":
                 from langchain.document_loaders import PyPDFLoader
                 loader = PyPDFLoader(tmp_path)
@@ -147,13 +148,13 @@ def vectorize_text(uploaded_files, vectorstore, lang_dict):
             # 3. Añadimos metadatos básicos
             for d in docs:
                 d.metadata["file_name"] = up_file.name
-            
+
 
             # 4. Chunking
             if ext == ".pdf" and "casos" in up_file.name.lower():
                  # Si es un PDF con casos de éxito, aplicamos chunking por secciones
                 full_text = "\n".join([d.page_content for d in docs])
-    
+
                 # Dividimos cada caso a partir de encabezados que empiezan por "✅"
                 import re
                 from langchain.schema import Document
@@ -222,12 +223,12 @@ Pregunta del Usuario: "{user_question}"
 Respuesta de la IA: "{ai_answer}"
 
 Pregunta de Seguimiento Sugerida:"""
-    
+
     prompt = ChatPromptTemplate.from_template(_template)
-    
+
     # Creamos una cadena simple solo para esta tarea
     chain = prompt | model | StrOutputParser()
-    
+
     try:
         # Usamos .invoke() porque no necesitamos streaming para esta llamada corta
         suggested_question = chain.invoke({
@@ -344,9 +345,9 @@ Evita afirmaciones categóricas si no están explícitamente respaldadas por el 
 - Comienza con una frase que resuma el impacto general de la IA en los fondos descritos.
 - Luego presenta **cada caso identificado en el contexto** con un título que indique claramente el fondo y su iniciativa (ej. ✅ First Round – Detección de oportunidades).
 - Bajo cada título, resume en **3–4 bullets**:
-  • Qué problema aborda.  
-  • Qué solución de IA aplican.  
-  • Qué resultados cuantificables lograron.  
+  • Qué problema aborda.
+  • Qué solución de IA aplican.
+  • Qué resultados cuantificables lograron.
   • Qué parte del proceso de inversión mejora (deal flow, selección, seguimiento, etc).
 - Si se mencionan métricas o cifras, inclúyelas siempre que sea posible.
 - **Incluye todos los casos aunque sean breves, incluso si no hay cifras completas.**
@@ -381,13 +382,13 @@ Evita afirmaciones categóricas si no están explícitamente respaldadas por el 
 
 ---
 
-**Contexto Relevante de los Documentos:**  
+**Contexto Relevante de los Documentos:**
 {{context}}
 
-**Historial de Conversación:**  
+**Historial de Conversación:**
 {{chat_history}}
 
-**Pregunta del Usuario:**  
+**Pregunta del Usuario:**
 {{question}}
 
 **Respuesta:**"""
@@ -404,13 +405,13 @@ Evita afirmaciones categóricas si no están explícitamente respaldadas por el 
 Si no conoces la respuesta basándote en el contexto, di claramente:
 "No conozco la respuesta basada en los documentos proporcionados".
 
-Contexto:  
+Contexto:
 {context}
 
-Historial:  
+Historial:
 {chat_history}
 
-Pregunta:  
+Pregunta:
 {question}
 """
         return ChatPromptTemplate.from_messages(
@@ -484,7 +485,7 @@ def load_retriever(vectorstore, top_k, api_key):
         return rrf([docs_mqr, docs_sim, docs_mmr, docs_bm25], k=top_k)
 
     return fused
-    
+
 def generate_queries(model, language):
     prompt = f"""You are a helpful assistant that generates multiple search queries based on a single input query in language {language}.
 Generate multiple search queries related to: {{original_query}}
@@ -516,13 +517,13 @@ def list_document_sources(vectorstore):
         # Hacemos una búsqueda de similitud con un término genérico para obtener documentos.
         # Pedimos un número alto (k=1000) para intentar obtener una muestra representativa.
         results = vectorstore.similarity_similarity_search("*", k=1000)
-        
+
         # Usamos un set para guardar solo los nombres de archivo únicos
         sources = set()
         for doc in results:
             if "source" in doc.metadata:
                 sources.add(doc.metadata["source"])
-        
+
         return sorted(list(sources))
 
     except Exception as e:
@@ -553,7 +554,7 @@ def get_custom_prompt(username):
     prompt_path = Path(f"./customizations/prompt/{username}.txt")
     if not prompt_path.is_file():
         prompt_path = Path("./customizations/prompt/default.txt")
-    
+
     try:
         return prompt_path.read_text(encoding='utf-8')
     except Exception:
@@ -637,7 +638,7 @@ if username != "demo":
     with st.sidebar:
         # Logo, Logout, Rails...
         # La imagen del logo por defecto ya se renderiza por el CSS global, este es el logo antiguo
-        # st.image('./customizations/logo/default.svg', use_column_width="always") 
+        # st.image('./customizations/logo/default.svg', use_column_width="always")
         st.markdown(f"""{lang_dict.get('logout_caption','Logged in as')} :orange[{username}]""")
         if st.button(lang_dict.get('logout_button','Logout')): logout()
         st.divider()
@@ -649,7 +650,7 @@ if username != "demo":
         if rails_dict:
             for i in sorted(rails_dict.keys()): st.markdown(f"{i}. {rails_dict[i]}")
         st.divider()
-        
+
         # Sidebar organizada con pestañas.
         st.header("Configuración")
         chat_tab, admin_tab = st.tabs(["⚙️ Opciones de Chat", "🗂️ Admin de Datos"])
@@ -662,13 +663,13 @@ if username != "demo":
                 min_value=1,
                 max_value=30,
                 value=default_k_vectorstore,
-                disabled=disable_vector_store    
+                disabled=disable_vector_store
             )
 
             #rag_strategies = ('Basic Retrieval', 'Maximal Marginal Relevance', 'Fusion')
             #default_strategy = user_defaults.get("RAG_STRATEGY", 'Basic Retrieval')
             #strategy = st.selectbox(lang_dict.get('rag_strategy', "RAG Strategy"), rag_strategies, index=rag_strategies.index(default_strategy) if default_strategy in rag_strategies else 0, disabled=disable_vector_store)
-            
+
             st.markdown("---")
             disable_chat_history = st.toggle(lang_dict.get('disable_chat_history', "Desactivar Memoria"), value=False)
             top_k_history = st.slider(lang_dict.get('k_chat_history', "Mensajes a recordar (K)"), 1, 10, user_defaults.get("TOP_K_HISTORY", 5), disabled=disable_chat_history)
@@ -685,7 +686,7 @@ if username != "demo":
                     if st.button("Process URLs"):
                         urls = [url.strip() for url in urls_text.split('\n') if url.strip()]
                         if urls: vectorize_url(urls, vectorstore, lang_dict)
-                
+
                 st.markdown("---")
                 with st.expander("Ver Documentos Cargados"):
                     st.caption("Muestra las fuentes de los documentos actualmente en la base de datos.")
@@ -700,7 +701,7 @@ if username != "demo":
                                 st.warning("No se encontraron documentos en la base de datos.")
             else:
                 st.info("No tienes permisos de administrador para cargar datos.")
-        
+
         # Opciones de Prompt fuera de las pestañas pero en la sidebar
                 st.divider()
                 st.header("Personalidad del Asistente")
@@ -724,12 +725,12 @@ st.markdown("""
     <style>
         /* Contenedor principal de toda la aplicación Streamlit */
         div[data-testid="stAppViewContainer"] {
-            max-width: 55% !important; 
+            max-width: 55% !important;
             margin: 0 auto !important;
         }
         /* Contenedor del campo de texto del chat */
         [data-testid="stChatInputContainer"] {
-            max-width: 55% !important; 
+            max-width: 55% !important;
             margin: 0 auto !important;
         }
     </style>
@@ -757,23 +758,23 @@ if not st.session_state.header_drawn:
 if not st.session_state.messages:
     # Mostramos el nuevo texto de bienvenida que querías
     st.info("Escribe tu pregunta en el cuadro de abajo o selecciona alguna de las siguientes sugerencias de preguntas")
-    
+
     # --- AÑADIMOS LAS PREGUNTAS FIJAS (CON EL TEXTO ACTUALIZADO) ---
     PREGUNTAS_SUGERIDAS = [
         "¿Qué pasos iniciales debo dar para introducir IA en mi fondo?",
         "Háblame de casos de éxito de fondos que ya usan la IA",
         "¿Cómo está la IA transformando el deal sourcing en VC y PE?"
     ]
-    
+
     # Creamos 3 columnas para los 3 botones
     cols = st.columns(len(PREGUNTAS_SUGERIDAS))
-    
+
     # Creamos un botón en cada columna
     for i, pregunta in enumerate(PREGUNTAS_SUGERIDAS):
         if cols[i].button(pregunta, key=f"rail_fijo_{i}"):
             st.session_state.question_from_button = pregunta
             st.rerun()
-    
+
 # Mostrar todo el historial de chat en cada ejecución
 for message in st.session_state.messages:
     avatar_icon = "🤖" if message.type == "ai" else "🧑‍💻"
@@ -784,7 +785,7 @@ for message in st.session_state.messages:
 if "suggested_question" in st.session_state and st.session_state.suggested_question:
     if st.button(f"Sugerencia: *{st.session_state.suggested_question}*"):
         st.session_state.question_from_button = st.session_state.suggested_question
-        del st.session_state.suggested_question 
+        del st.session_state.suggested_question
         st.rerun()
 
 
@@ -831,7 +832,7 @@ if not disable_vector_store:
         print("=== SUBPREGUNTAS GENERADAS ===")
         for sq in subquestions:
             print("-", sq)
-            
+
         # 2. Recuperamos documentos por subpregunta
         all_docs = []
         for subq in subquestions:
@@ -935,5 +936,3 @@ try:
 
 except Exception as e:
     st.error(f"Error durante la generación de la respuesta: {e}")
-
-
